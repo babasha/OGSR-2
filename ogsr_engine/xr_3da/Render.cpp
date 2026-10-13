@@ -1,0 +1,14 @@
+#include "stdafx.h"
+#include "Render.h"
+
+IRender_interface::~IRender_interface(){};
+
+// ENGINE_API	IRender_interface*	Render		= NULL;
+
+// resources
+IRender_Light::~IRender_Light() { ::Render->light_destroy(this); }
+
+ENGINE_API ShExports shader_exports{};
+
+ENGINE_API GRASS_SHADER_DATA grass_shader_data{};
+ENGINE_API GRASS_SHADER_DATA_OLD grass_shader_data_old{};

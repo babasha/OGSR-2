@@ -1,0 +1,108 @@
+﻿# Папки
+/.vs
+/.claude
+/3rd_party/_LIB
+/3rd_party/_TEMP
+/ogsr_engine/_LIB
+/ogsr_engine/_TEMP
+/bin*
+
+# 3rd-party upstream payloads — NOT vendored, same policy as every other dependency
+# (most of them nest the clone in a subdir and ignore it via their own
+# 3rd_party/Src/<dep>/.gitignore, e.g. NVIDIA_DLSS/.gitignore). These two unpack
+# straight into their dep folder instead of a nested one, so the rule lives here —
+# and meshoptimizer ships its OWN .gitignore, which must not be clobbered.
+#   NVIDIA_Streamline — ~67 MB prebuilt binary drop (bin/include/lib), SL 2.12.0
+#   meshoptimizer     — upstream repo root (src/, tools/…), v1.2
+# Both are consumed by 3rd_party/Src/vulkan_renderer.props + xrRender_Vulkan.vcxproj
+# (vk_sl.cpp / vk_dlss.cpp / vk_meshopt.cpp). See Update_Components.cmd to refetch.
+/3rd_party/Src/NVIDIA_Streamline/
+/3rd_party/Src/meshoptimizer/
+
+# Same treatment, same reason — they unpack flat rather than into a nested clone
+# dir. Unlike everything above, these two are BUILT here, so the folder also
+# holds a CMake tree: ~216 MB, nearly all of it build output.
+#   RmlUi    — HTML/CSS UI layer, tag 6.2       (xrGame/ui_rml.cpp)
+#   freetype — glyph rasteriser, VER-2-13-3, which RmlUi's font engine needs
+# xrGame.vcxproj hardwires both the headers and the built libs:
+#   ...\Src\RmlUi\Include  ...\Src\RmlUi\build\Release\rmlui.lib
+#   ...\Src\freetype\build\Release\freetype.lib
+# so those paths are part of the contract. See Update_Components.cmd to refetch
+# and rebuild.
+/3rd_party/Src/RmlUi/
+/3rd_party/Src/freetype/
+
+# Build intermediaries (MSBuild ObjectFileName="obj\")
+**/obj/
+
+# Stray nested MSBuild output (xrCore built into a nested _TEMP tree)
+**/_TEMP/
+
+# Codex agent scaffolding (not engine code)
+/.codex/
+# AGENTS.md only points at /.codex/memory/, which is ignored above — committing it
+# would publish a dangling reference to a directory that is not in the repository.
+/AGENTS.md
+
+# Personal working notes / roadmaps — thinking-in-progress, not engine source.
+/aiUp.md
+/gpu_npc_ai_roadmap.md
+/gpu_npc_render_milestone1.md
+/gpu_particles_roadmap.md
+
+# Local build helpers (machine-specific paths; the canonical build is Engine.sln).
+# Every one of these hardcodes an absolute checkout path and a specific VS /
+# Vulkan-SDK install, so they are useless to anyone else and go stale the moment
+# the repo is cloned elsewhere. Keep your own copies locally.
+/_build_*.bat
+/_parked/
+
+# Build output captured to a file — regenerated on every build, never reviewable
+# in a diff. Applies to the whole tree (msbuild logs, glslc logs, shader
+# compile errors under Layers/xrRenderVulkan/).
+*.log
+build_err.txt
+/_build_*.txt
+
+
+# Content-extraction toolchain for the Anomaly/GAMMA archives. Kept out of the
+# engine repo deliberately: it is an authoring-side utility, not something the
+# engine builds or links, and it exists to read third-party mod distributions.
+/tools/
+
+# Precompiled Headers
+*.ipch
+
+# Всякий ненужный мусор:
+*.VC.*
+*.suo
+*.user
+*.exp
+*.aps
+*.TMP
+
+# Windows image file caches
+Thumbs.db
+ehthumbs.db
+
+# Folder config file
+Desktop.ini
+
+# Recycle Bin used on file shares
+$RECYCLE.BIN/
+
+/gamedata
+/gamedata*
+/_appdata_
+/fsgame*
+/mods
+
+/CppDependOut
+/OGSR_Engine_private.cdproj
+
+ogsr_build_info.hpp
+# Vendored third-party build tree: kept locally, never committed here.
+/3rd_party/GameNetworkingSockets/
+
+# AMD FidelityFX SDK — fetched manually, see Update_Components.cmd
+/3rd_party/Src/AMD_FidelityFX/

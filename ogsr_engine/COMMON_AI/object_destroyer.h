@@ -1,0 +1,142 @@
+////////////////////////////////////////////////////////////////////////////
+//	Module 		: object_destroyer.h
+//	Created 	: 21.01.2003
+//  Modified 	: 09.07.2004
+//	Author		: Dmitriy Iassenev
+//	Description : Object destroyer
+////////////////////////////////////////////////////////////////////////////
+
+#pragma once
+
+#include <type_traits>
+
+struct CDestroyer
+{
+    IC static void delete_data(LPCSTR data) {}
+
+    IC static void delete_data(LPSTR data) { xr_free(data); }
+
+    template <typename T1, typename T2>
+    IC static void delete_data(std::pair<T1, T2>& data)
+    {
+        delete_data(data.first);
+        delete_data(data.second);
+    }
+
+    template <typename T, int size>
+    IC static void delete_data(svector<T, size>& data)
+    {
+        auto I = data.begin();
+        auto E = data.end();
+        for (; I != E; ++I)
+            delete_data(*I);
+        data.clear();
+    }
+
+    template <template <typename, typename> class T1, typename T2, typename T3>
+    IC static void delete_data(T1<T2, T3>& data, bool)
+    {
+        T1<T2, T3> temp = data;
+        for (; !temp.empty(); temp.pop())
+            delete_data(temp.top());
+    }
+
+    template <template <typename, typename, typename> class T1, typename T2, typename T3, typename T4>
+    IC static void delete_data(T1<T2, T3, T4>& data, bool)
+    {
+        T1<T2, T3, T4> temp = data;
+        for (; !temp.empty(); temp.pop())
+            delete_data(temp.top());
+    }
+
+    template <typename T1, typename T2>
+    IC static void delete_data(xr_stack<T1, T2>& data)
+    {
+        delete_data(data, true);
+    }
+
+
+    // See object_comparer.h's CHelper for why a nested explicit
+    // specialization (illegal at namespace scope) is rewritten as
+    // std::bool_constant tag dispatch under an unchanged
+    // delete_data<flag>(...) call syntax.
+    template <typename T>
+    struct CHelper1
+    {
+        IC static void delete_data(T&, std::false_type)
+        {}
+        IC static void delete_data(T& data, std::true_type)
+        {
+            data.destroy();
+        }
+        template <bool a>
+        IC static void delete_data(T& data)
+        {
+            delete_data(data, std::bool_constant<a>{});
+        }
+    };
+
+    template <typename T>
+    struct CHelper2
+    {
+        IC static void delete_data(T& data, std::false_type)
+        {
+            CHelper1<T>::template delete_data<object_type_traits::is_base_and_derived<IPureDestroyableObject, T>::value>(data);
+        }
+        IC static void delete_data(T& data, std::true_type)
+        {
+            if (data)
+                CDestroyer::delete_data(*data);
+            xr_delete(data);
+        }
+        template <bool a>
+        IC static void delete_data(T& data)
+        {
+            delete_data(data, std::bool_constant<a>{});
+        }
+    };
+
+    struct CHelper3
+    {
+        template <typename T>
+        IC static void delete_data(T& data)
+        {
+            auto I = data.begin();
+            auto E = data.end();
+            for (; I != E; ++I)
+                CDestroyer::delete_data(*I);
+            data.clear();
+        }
+    };
+
+    template <typename T>
+    struct CHelper4
+    {
+        IC static void delete_data(T& data, std::false_type)
+        {
+            CHelper2<T>::template delete_data<object_type_traits::is_pointer<T>::value>(data);
+        }
+        IC static void delete_data(T& data, std::true_type)
+        {
+            CHelper3::delete_data(data);
+        }
+        template <bool a>
+        IC static void delete_data(T& data)
+        {
+            delete_data(data, std::bool_constant<a>{});
+        }
+    };
+
+    template <typename T>
+    IC static void delete_data(T& data)
+    {
+        CHelper4<T>::template delete_data<object_type_traits::is_stl_container<T>::value>(data);
+    }
+};
+
+template <typename T>
+IC void delete_data(const T& data)
+{
+    T* temp = const_cast<T*>(&data);
+    CDestroyer::delete_data(*temp);
+}

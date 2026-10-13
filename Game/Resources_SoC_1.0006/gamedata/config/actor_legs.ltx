@@ -1,0 +1,437 @@
+; ---------------------------------------------------------------------------
+; First-person visible body (CActorFirstPersonBody).
+;
+; Toggle in console:  g_first_person_body 1
+;
+; Assets and animation tables are ported from Shoker Weapon Mod 2.1 / SWM Team
+; (2013, Shoker & Kentaur), by way of the Anomaly port by Wang_Laoshi.
+; The [legs_anims_*] tables below are GENERATED -- see tools/legs_port/.
+; ---------------------------------------------------------------------------
+
+[actor_legs]
+visual                  = sm\actor_legs\no_outfit
+
+; Which generated table drives the animation choice.
+anim_table              = legs_anims_basic
+anim_table_noncombat    = legs_anims_noncombat
+
+; Vertical offset applied after the body is pinned to the actor's feet.
+height                  = 0.0
+height_ladder           = -0.1
+
+; Stop drawing once the camera is further than this from the actor (vehicles,
+; cutscene cameras, death cam).
+hide_distance           = 2.0
+
+; Body offset from the camera, along the view heading / its right vector.
+; Negative forward pulls the body back so the chest is not in the near plane.
+shift_fwd               = -0.65
+; Used instead of shift_fwd while nothing is readied (SWM's calm stance leans back).
+shift_fwd_noncombat     = -0.5
+shift_rgt               = 0.0
+
+; Fallback drops used only when the camera is detached from the actor capsule.
+drop_stand              = 1.5
+drop_crouch             = 1.23
+drop_crouch_accel       = 0.95
+
+; Camera-to-actor distance under which the feet are pinned to the actor capsule.
+; A standing first-person camera sits ~1.65-1.75 above the feet, so this has to
+; clear that -- key it off drop_stand and the pin never engages at all.
+pin_distance            = 1.7
+
+; Camera pitch below which the body stops following the view heading and sticks
+; to the actor's own heading -- otherwise the legs pivot under you as you look
+; down and turn.
+look_down_threshold     = -0.65
+
+; --- turning ---------------------------------------------------------------
+; 1 = the body always faces where you are looking. 0 = SWM's original rule, where
+; looking down hands the heading to the actor's own body -- and OGSR only realigns
+; the actor after the camera has run 45 degrees away from it, so the torso
+; visibly arrives a beat after the camera.
+follow_view             = 1
+
+; Rate limit on the body yaw, rad/s. 0 = follow the view exactly (default).
+; Anything above 0 is deliberate weight -- and deliberate trailing on a fast turn.
+turn_speed              = 0.0
+
+; Yaw error that starts a step-turn cycle. The 'down' one applies while looking at
+; your own feet, where a small misalignment is far more visible.
+turn_threshold          = 0.2
+turn_threshold_down     = 0.08
+turn_hold_ms            = 500
+turn_anim_left          = lancew_legs_turn_left
+turn_anim_right         = lancew_legs_turn_right
+
+; Per-cycle position overrides: <cycle> = forward, right
+[legs_shifts]
+leg_ladder_idle         = -0.15, 0.0
+leg_ladder_up           = -0.15, 0.0
+leg_ladder_down         = -0.15, 0.0
+lancew_legs_sprint      = -0.65, 0.0
+lancew_legs_idle_sc     = -1.5,  0.0
+lancew_legs_walk_sc     = -1.5,  0.0
+lancew_legs_walk_fl_sc  = -1.5,  0.0
+lancew_legs_walk_fr_sc  = -1.5,  0.0
+
+
+[legs_anims_basic]
+; 159 states, from AnimTable_Basic
+default = lancew_legs_idle
+    0 = lancew_legs_idle               ; idle
+    1 = lancew_legs_moving             ; mcFwd
+    2 = lancew_legs_moving_b           ; mcBack
+    4 = lancew_legs_moving_l           ; mcLStrafe
+    5 = lancew_legs_moving_fl          ; mcFwd|mcLStrafe
+    6 = lancew_legs_moving_bl          ; mcBack|mcLStrafe
+    8 = lancew_legs_moving_r           ; mcRStrafe
+    9 = lancew_legs_moving_fr          ; mcFwd|mcRStrafe
+   10 = lancew_legs_moving_br          ; mcBack|mcRStrafe
+   16 = lancew_legs_idle_c             ; mcCrouch
+   17 = lancew_legs_moving_c           ; mcFwd|mcCrouch
+   18 = lancew_legs_moving_b_c         ; mcBack|mcCrouch
+   20 = lancew_legs_moving_l_c         ; mcLStrafe|mcCrouch
+   21 = lancew_legs_moving_fl_c        ; mcFwd|mcLStrafe|mcCrouch
+   22 = lancew_legs_moving_bl_c        ; mcBack|mcLStrafe|mcCrouch
+   24 = lancew_legs_moving_r_c         ; mcRStrafe|mcCrouch
+   25 = lancew_legs_moving_fr_c        ; mcFwd|mcRStrafe|mcCrouch
+   26 = lancew_legs_moving_br_c        ; mcBack|mcRStrafe|mcCrouch
+   32 = lancew_legs_idle               ; mcAccel
+   33 = lancew_legs_walk               ; mcFwd|mcAccel
+   34 = lancew_legs_walk_b             ; mcBack|mcAccel
+   36 = lancew_legs_walk_l             ; mcLStrafe|mcAccel
+   37 = lancew_legs_walk_l             ; mcFwd|mcLStrafe|mcAccel
+   38 = lancew_legs_walk_bl            ; mcBack|mcLStrafe|mcAccel
+   40 = lancew_legs_walk_r             ; mcRStrafe|mcAccel
+   41 = lancew_legs_walk_r             ; mcFwd|mcRStrafe|mcAccel
+   42 = lancew_legs_walk_br            ; mcBack|mcRStrafe|mcAccel
+   48 = lancew_legs_idle_sc            ; mcCrouch|mcAccel
+   49 = lancew_legs_walk_sc            ; mcFwd|mcCrouch|mcAccel
+   50 = lancew_legs_walk_b_sc          ; mcBack|mcCrouch|mcAccel
+   52 = lancew_legs_walk_l_sc          ; mcLStrafe|mcCrouch|mcAccel
+   53 = lancew_legs_walk_fl_sc         ; mcFwd|mcLStrafe|mcCrouch|mcAccel
+   54 = lancew_legs_walk_bl_sc         ; mcBack|mcLStrafe|mcCrouch|mcAccel
+   56 = lancew_legs_walk_r_sc          ; mcRStrafe|mcCrouch|mcAccel
+   57 = lancew_legs_walk_fr_sc         ; mcFwd|mcRStrafe|mcCrouch|mcAccel
+   58 = lancew_legs_walk_br_sc         ; mcBack|mcRStrafe|mcCrouch|mcAccel
+  128 = lancew_legs_jump_start         ; mcJump
+  129 = lancew_legs_jump_start         ; mcFwd|mcJump
+  130 = lancew_legs_jump_start         ; mcBack|mcJump
+  132 = lancew_legs_jump_start         ; mcLStrafe|mcJump
+  133 = lancew_legs_jump_start         ; mcFwd|mcLStrafe|mcJump
+  134 = lancew_legs_jump_start         ; mcBack|mcLStrafe|mcJump
+  136 = lancew_legs_jump_start         ; mcRStrafe|mcJump
+  137 = lancew_legs_jump_start         ; mcFwd|mcRStrafe|mcJump
+  138 = lancew_legs_jump_start         ; mcBack|mcRStrafe|mcJump
+  144 = lancew_legs_jump_start         ; mcCrouch|mcJump
+  145 = lancew_legs_jump_start         ; mcFwd|mcCrouch|mcJump
+  146 = lancew_legs_jump_start         ; mcBack|mcCrouch|mcJump
+  148 = lancew_legs_jump_start         ; mcLStrafe|mcCrouch|mcJump
+  149 = lancew_legs_jump_start         ; mcFwd|mcLStrafe|mcCrouch|mcJump
+  150 = lancew_legs_jump_start         ; mcBack|mcLStrafe|mcCrouch|mcJump
+  152 = lancew_legs_jump_start         ; mcRStrafe|mcCrouch|mcJump
+  153 = lancew_legs_jump_start         ; mcFwd|mcRStrafe|mcCrouch|mcJump
+  154 = lancew_legs_jump_start         ; mcBack|mcRStrafe|mcCrouch|mcJump
+  160 = lancew_legs_jump_start         ; mcAccel|mcJump
+  161 = lancew_legs_jump_start         ; mcFwd|mcAccel|mcJump
+  162 = lancew_legs_jump_start         ; mcBack|mcAccel|mcJump
+  164 = lancew_legs_jump_start         ; mcLStrafe|mcAccel|mcJump
+  165 = lancew_legs_jump_start         ; mcFwd|mcLStrafe|mcAccel|mcJump
+  166 = lancew_legs_jump_start         ; mcBack|mcLStrafe|mcAccel|mcJump
+  168 = lancew_legs_jump_start         ; mcRStrafe|mcAccel|mcJump
+  169 = lancew_legs_jump_start         ; mcFwd|mcRStrafe|mcAccel|mcJump
+  170 = lancew_legs_jump_start         ; mcBack|mcRStrafe|mcAccel|mcJump
+  176 = lancew_legs_jump_start_sc      ; mcCrouch|mcAccel|mcJump
+  177 = lancew_legs_jump_start_sc      ; mcFwd|mcCrouch|mcAccel|mcJump
+  178 = lancew_legs_jump_start_sc      ; mcBack|mcCrouch|mcAccel|mcJump
+  180 = lancew_legs_jump_start_sc      ; mcLStrafe|mcCrouch|mcAccel|mcJump
+  181 = lancew_legs_jump_start_sc      ; mcFwd|mcLStrafe|mcCrouch|mcAccel|mcJump
+  182 = lancew_legs_jump_start_sc      ; mcBack|mcLStrafe|mcCrouch|mcAccel|mcJump
+  184 = lancew_legs_jump_start         ; mcRStrafe|mcCrouch|mcAccel|mcJump
+  185 = lancew_legs_jump_start_sc      ; mcFwd|mcRStrafe|mcCrouch|mcAccel|mcJump
+  186 = lancew_legs_jump_start_sc      ; mcBack|mcRStrafe|mcCrouch|mcAccel|mcJump
+  256 = lancew_legs_jump_idle          ; mcFall
+  257 = lancew_legs_jump_idle          ; mcFwd|mcFall
+  258 = lancew_legs_jump_idle          ; mcBack|mcFall
+  260 = lancew_legs_jump_idle          ; mcLStrafe|mcFall
+  261 = lancew_legs_jump_idle          ; mcFwd|mcLStrafe|mcFall
+  262 = lancew_legs_jump_idle          ; mcBack|mcLStrafe|mcFall
+  264 = lancew_legs_jump_idle          ; mcRStrafe|mcFall
+  265 = lancew_legs_jump_idle          ; mcFwd|mcRStrafe|mcFall
+  266 = lancew_legs_jump_idle          ; mcBack|mcRStrafe|mcFall
+  272 = lancew_legs_jump_idle_c        ; mcCrouch|mcFall
+  273 = lancew_legs_jump_idle_c        ; mcFwd|mcCrouch|mcFall
+  274 = lancew_legs_jump_idle_c        ; mcBack|mcCrouch|mcFall
+  276 = lancew_legs_jump_idle_c        ; mcLStrafe|mcCrouch|mcFall
+  277 = lancew_legs_jump_idle_c        ; mcFwd|mcLStrafe|mcCrouch|mcFall
+  278 = lancew_legs_jump_idle_c        ; mcBack|mcLStrafe|mcCrouch|mcFall
+  280 = lancew_legs_jump_idle_c        ; mcRStrafe|mcCrouch|mcFall
+  281 = lancew_legs_jump_idle_c        ; mcFwd|mcRStrafe|mcCrouch|mcFall
+  282 = lancew_legs_jump_idle_c        ; mcBack|mcRStrafe|mcCrouch|mcFall
+  288 = lancew_legs_jump_idle_c        ; mcAccel|mcFall
+  289 = lancew_legs_jump_idle_c        ; mcFwd|mcAccel|mcFall
+  290 = lancew_legs_jump_idle_c        ; mcBack|mcAccel|mcFall
+  292 = lancew_legs_jump_idle_c        ; mcLStrafe|mcAccel|mcFall
+  293 = lancew_legs_jump_idle_c        ; mcFwd|mcLStrafe|mcAccel|mcFall
+  294 = lancew_legs_jump_idle_c        ; mcBack|mcLStrafe|mcAccel|mcFall
+  296 = lancew_legs_jump_idle_c        ; mcRStrafe|mcAccel|mcFall
+  297 = lancew_legs_jump_idle_c        ; mcFwd|mcRStrafe|mcAccel|mcFall
+  298 = lancew_legs_jump_idle_c        ; mcBack|mcRStrafe|mcAccel|mcFall
+  304 = lancew_legs_jump_idle_sc       ; mcCrouch|mcAccel|mcFall
+  305 = lancew_legs_jump_idle_sc       ; mcFwd|mcCrouch|mcAccel|mcFall
+  306 = lancew_legs_jump_idle_sc       ; mcBack|mcCrouch|mcAccel|mcFall
+  308 = lancew_legs_jump_idle_sc       ; mcLStrafe|mcCrouch|mcAccel|mcFall
+  309 = lancew_legs_jump_idle_sc       ; mcFwd|mcLStrafe|mcCrouch|mcAccel|mcFall
+  310 = lancew_legs_jump_idle_sc       ; mcBack|mcLStrafe|mcCrouch|mcAccel|mcFall
+  312 = lancew_legs_jump_idle_sc       ; mcRStrafe|mcCrouch|mcAccel|mcFall
+  313 = lancew_legs_jump_idle_sc       ; mcFwd|mcRStrafe|mcCrouch|mcAccel|mcFall
+  314 = lancew_legs_jump_idle_sc       ; mcBack|mcRStrafe|mcCrouch|mcAccel|mcFall
+  512 = lancew_legs_jump_end           ; mcLanding
+  513 = lancew_legs_jump_end           ; mcFwd|mcLanding
+  514 = lancew_legs_jump_end           ; mcBack|mcLanding
+  516 = lancew_legs_jump_end           ; mcLStrafe|mcLanding
+  517 = lancew_legs_jump_end           ; mcFwd|mcLStrafe|mcLanding
+  518 = lancew_legs_jump_end           ; mcBack|mcLStrafe|mcLanding
+  520 = lancew_legs_jump_end           ; mcRStrafe|mcLanding
+  521 = lancew_legs_jump_end           ; mcFwd|mcRStrafe|mcLanding
+  522 = lancew_legs_jump_end           ; mcBack|mcRStrafe|mcLanding
+  528 = lancew_legs_jump_end           ; mcCrouch|mcLanding
+  529 = lancew_legs_jump_end           ; mcFwd|mcCrouch|mcLanding
+  530 = lancew_legs_jump_end           ; mcBack|mcCrouch|mcLanding
+  532 = lancew_legs_jump_end           ; mcLStrafe|mcCrouch|mcLanding
+  533 = lancew_legs_jump_end           ; mcFwd|mcLStrafe|mcCrouch|mcLanding
+  534 = lancew_legs_jump_end           ; mcBack|mcLStrafe|mcCrouch|mcLanding
+  536 = lancew_legs_jump_end           ; mcRStrafe|mcCrouch|mcLanding
+  537 = lancew_legs_jump_end           ; mcFwd|mcRStrafe|mcCrouch|mcLanding
+  538 = lancew_legs_jump_end           ; mcBack|mcRStrafe|mcCrouch|mcLanding
+  544 = lancew_legs_jump_end           ; mcAccel|mcLanding
+  545 = lancew_legs_jump_end           ; mcFwd|mcAccel|mcLanding
+  546 = lancew_legs_jump_end           ; mcBack|mcAccel|mcLanding
+  548 = lancew_legs_jump_end           ; mcLStrafe|mcAccel|mcLanding
+  549 = lancew_legs_jump_end           ; mcFwd|mcLStrafe|mcAccel|mcLanding
+  550 = lancew_legs_jump_end           ; mcBack|mcLStrafe|mcAccel|mcLanding
+  552 = lancew_legs_jump_end           ; mcRStrafe|mcAccel|mcLanding
+  553 = lancew_legs_jump_end           ; mcFwd|mcRStrafe|mcAccel|mcLanding
+  554 = lancew_legs_jump_end           ; mcBack|mcRStrafe|mcAccel|mcLanding
+  560 = lancew_legs_jump_end           ; mcCrouch|mcAccel|mcLanding
+  561 = lancew_legs_jump_end           ; mcFwd|mcCrouch|mcAccel|mcLanding
+  562 = lancew_legs_jump_end           ; mcBack|mcCrouch|mcAccel|mcLanding
+  564 = lancew_legs_jump_end           ; mcLStrafe|mcCrouch|mcAccel|mcLanding
+  565 = lancew_legs_jump_end           ; mcFwd|mcLStrafe|mcCrouch|mcAccel|mcLanding
+  566 = lancew_legs_jump_end           ; mcBack|mcLStrafe|mcCrouch|mcAccel|mcLanding
+  568 = lancew_legs_jump_end           ; mcRStrafe|mcCrouch|mcAccel|mcLanding
+  569 = lancew_legs_jump_end           ; mcFwd|mcRStrafe|mcCrouch|mcAccel|mcLanding
+  570 = lancew_legs_jump_end           ; mcBack|mcRStrafe|mcCrouch|mcAccel|mcLanding
+ 2048 = leg_ladder_idle                ; mcClimb
+ 2049 = leg_ladder_up                  ; mcFwd|mcClimb
+ 2050 = leg_ladder_up                  ; mcBack|mcClimb
+ 2080 = leg_ladder_idle                ; mcAccel|mcClimb
+ 2081 = leg_ladder_up                  ; mcFwd|mcAccel|mcClimb
+ 2082 = leg_ladder_up                  ; mcBack|mcAccel|mcClimb
+ 4097 = lancew_legs_sprint             ; mcFwd|mcSprint
+ 4101 = lancew_legs_moving_fl          ; mcFwd|mcLStrafe|mcSprint
+ 4105 = lancew_legs_moving_fr          ; mcFwd|mcRStrafe|mcSprint
+ 4224 = lancew_legs_jump_start         ; mcJump|mcSprint
+ 4225 = lancew_legs_jump_start         ; mcFwd|mcJump|mcSprint
+ 4352 = lancew_legs_jump_idle          ; mcFall|mcSprint
+ 4353 = lancew_legs_jump_idle          ; mcFwd|mcFall|mcSprint
+ 4608 = lancew_legs_jump_end           ; mcLanding|mcSprint
+ 4609 = lancew_legs_jump_end           ; mcFwd|mcLanding|mcSprint
+
+[legs_anims_noncombat]
+; 19 states, from AnimTable_NonCombat
+default = lancew_legs_idle
+    0 = leg_stand_idle                 ; idle
+   16 = leg_crouch_idle                ; mcCrouch
+   17 = leg_crouch_walk_fwd            ; mcFwd|mcCrouch
+   18 = leg_crouch_walk_back           ; mcBack|mcCrouch
+   20 = leg_crouch_walk_left           ; mcLStrafe|mcCrouch
+   21 = lancew_legs_moving_fl_c        ; mcFwd|mcLStrafe|mcCrouch
+   22 = lancew_legs_moving_bl_c        ; mcBack|mcLStrafe|mcCrouch
+   24 = leg_crouch_walk_right          ; mcRStrafe|mcCrouch
+   25 = lancew_legs_moving_fr_c        ; mcFwd|mcRStrafe|mcCrouch
+   26 = lancew_legs_moving_br_c        ; mcBack|mcRStrafe|mcCrouch
+   32 = leg_stand_idle                 ; mcAccel
+   33 = leg_stand_walk_fwd_shift       ; mcFwd|mcAccel
+   34 = leg_stand_walk_back_shift      ; mcBack|mcAccel
+   36 = leg_stand_walk_left_shift      ; mcLStrafe|mcAccel
+   37 = leg_stand_walk_fwd_left_shift  ; mcFwd|mcLStrafe|mcAccel
+   38 = leg_stand_walk_back_left_shift ; mcBack|mcLStrafe|mcAccel
+   40 = leg_stand_walk_right_shift     ; mcRStrafe|mcAccel
+   41 = leg_stand_walk_fwd_right_shift ; mcFwd|mcRStrafe|mcAccel
+   42 = leg_stand_walk_back_right_shift ; mcBack|mcRStrafe|mcAccel
+
+[legs_anims_sloweddown]
+; 19 states, from AnimTable_SlowedDown
+default = lancew_legs_idle
+    1 = leg_stand_walk_fwd             ; mcFwd
+    2 = leg_stand_walk_back_shift      ; mcBack
+    4 = leg_stand_walk_left_shift      ; mcLStrafe
+    5 = leg_stand_walk_fwd_left        ; mcFwd|mcLStrafe
+    6 = leg_stand_walk_back_left_shift ; mcBack|mcLStrafe
+    8 = leg_stand_walk_right_shift     ; mcRStrafe
+    9 = leg_stand_walk_fwd_right       ; mcFwd|mcRStrafe
+   10 = leg_stand_walk_back_right_shift ; mcBack|mcRStrafe
+   17 = lancew_legs_moving_c           ; mcFwd|mcCrouch
+   18 = lancew_legs_moving_b_c         ; mcBack|mcCrouch
+   20 = lancew_legs_moving_l_c         ; mcLStrafe|mcCrouch
+   21 = lancew_legs_moving_fl_c        ; mcFwd|mcLStrafe|mcCrouch
+   22 = lancew_legs_moving_bl_c        ; mcBack|mcLStrafe|mcCrouch
+   24 = lancew_legs_moving_r_c         ; mcRStrafe|mcCrouch
+   25 = lancew_legs_moving_fr_c        ; mcFwd|mcRStrafe|mcCrouch
+   26 = lancew_legs_moving_br_c        ; mcBack|mcRStrafe|mcCrouch
+ 4097 = lancew_legs_moving             ; mcFwd|mcSprint
+ 4101 = lancew_legs_moving_fl          ; mcFwd|mcLStrafe|mcSprint
+ 4105 = lancew_legs_moving_fr          ; mcFwd|mcRStrafe|mcSprint
+
+[legs_anims_alt]
+; 147 states, from AnimTable_BasicTEST
+default = leg_stand_idle
+    0 = leg_stand_idle                 ; idle
+    1 = leg_stand_walk_fwd             ; mcFwd
+    2 = leg_stand_walk_back            ; mcBack
+    4 = leg_stand_walk_left            ; mcLStrafe
+    5 = leg_stand_walk_fwd_left        ; mcFwd|mcLStrafe
+    6 = leg_stand_walk_back_left       ; mcBack|mcLStrafe
+    8 = leg_stand_walk_right           ; mcRStrafe
+    9 = leg_stand_walk_fwd_right       ; mcFwd|mcRStrafe
+   10 = leg_stand_walk_back_right      ; mcBack|mcRStrafe
+   16 = leg_crouch_idle                ; mcCrouch
+   17 = leg_crouch_walk_fwd            ; mcFwd|mcCrouch
+   18 = leg_crouch_walk_back           ; mcBack|mcCrouch
+   20 = leg_crouch_walk_left           ; mcLStrafe|mcCrouch
+   21 = leg_stand_idle                 ; mcFwd|mcLStrafe|mcCrouch
+   22 = leg_stand_idle                 ; mcBack|mcLStrafe|mcCrouch
+   24 = leg_crouch_walk_right          ; mcRStrafe|mcCrouch
+   25 = leg_stand_idle                 ; mcFwd|mcRStrafe|mcCrouch
+   26 = leg_stand_idle                 ; mcBack|mcRStrafe|mcCrouch
+   32 = leg_stand_idle                 ; mcAccel
+   33 = leg_stand_walk_fwd_shift       ; mcFwd|mcAccel
+   34 = leg_stand_walk_back_shift      ; mcBack|mcAccel
+   36 = leg_stand_walk_left_shift      ; mcLStrafe|mcAccel
+   37 = leg_stand_walk_fwd_left_shift  ; mcFwd|mcLStrafe|mcAccel
+   38 = leg_stand_walk_back_left_shift ; mcBack|mcLStrafe|mcAccel
+   40 = leg_stand_walk_right_shift     ; mcRStrafe|mcAccel
+   41 = leg_stand_walk_fwd_right_shift ; mcFwd|mcRStrafe|mcAccel
+   42 = leg_stand_walk_back_right_shift ; mcBack|mcRStrafe|mcAccel
+  128 = leg_stand_jump_begin           ; mcJump
+  129 = leg_stand_jump_fwd_begin       ; mcFwd|mcJump
+  130 = leg_stand_jump_back_begin      ; mcBack|mcJump
+  132 = leg_stand_idle                 ; mcLStrafe|mcJump
+  133 = leg_stand_idle                 ; mcFwd|mcLStrafe|mcJump
+  134 = leg_stand_idle                 ; mcBack|mcLStrafe|mcJump
+  136 = leg_stand_walk_right           ; mcRStrafe|mcJump
+  137 = leg_stand_walk_right           ; mcFwd|mcRStrafe|mcJump
+  138 = leg_stand_idle                 ; mcBack|mcRStrafe|mcJump
+  144 = leg_stand_jump_begin           ; mcCrouch|mcJump
+  145 = leg_stand_jump_fwd_begin       ; mcFwd|mcCrouch|mcJump
+  146 = leg_stand_jump_back_begin      ; mcBack|mcCrouch|mcJump
+  148 = leg_stand_idle                 ; mcLStrafe|mcCrouch|mcJump
+  149 = leg_stand_idle                 ; mcFwd|mcLStrafe|mcCrouch|mcJump
+  150 = leg_stand_idle                 ; mcBack|mcLStrafe|mcCrouch|mcJump
+  152 = leg_stand_idle                 ; mcRStrafe|mcCrouch|mcJump
+  153 = leg_stand_idle                 ; mcFwd|mcRStrafe|mcCrouch|mcJump
+  154 = leg_stand_idle                 ; mcBack|mcRStrafe|mcCrouch|mcJump
+  160 = leg_stand_jump_begin           ; mcAccel|mcJump
+  161 = leg_stand_jump_fwd_begin       ; mcFwd|mcAccel|mcJump
+  162 = leg_stand_idle                 ; mcBack|mcAccel|mcJump
+  164 = leg_stand_idle                 ; mcLStrafe|mcAccel|mcJump
+  165 = leg_stand_idle                 ; mcFwd|mcLStrafe|mcAccel|mcJump
+  166 = leg_stand_idle                 ; mcBack|mcLStrafe|mcAccel|mcJump
+  168 = leg_stand_idle                 ; mcRStrafe|mcAccel|mcJump
+  169 = leg_stand_idle                 ; mcFwd|mcRStrafe|mcAccel|mcJump
+  170 = leg_stand_idle                 ; mcBack|mcRStrafe|mcAccel|mcJump
+  176 = leg_stand_jump_begin           ; mcCrouch|mcAccel|mcJump
+  177 = leg_stand_jump_fwd_begin       ; mcFwd|mcCrouch|mcAccel|mcJump
+  178 = leg_stand_idle                 ; mcBack|mcCrouch|mcAccel|mcJump
+  180 = leg_stand_idle                 ; mcLStrafe|mcCrouch|mcAccel|mcJump
+  181 = leg_stand_idle                 ; mcFwd|mcLStrafe|mcCrouch|mcAccel|mcJump
+  182 = leg_stand_idle                 ; mcBack|mcLStrafe|mcCrouch|mcAccel|mcJump
+  184 = leg_stand_idle                 ; mcRStrafe|mcCrouch|mcAccel|mcJump
+  185 = leg_stand_idle                 ; mcFwd|mcRStrafe|mcCrouch|mcAccel|mcJump
+  186 = leg_stand_idle                 ; mcBack|mcRStrafe|mcCrouch|mcAccel|mcJump
+  256 = leg_stand_jump_idle            ; mcFall
+  257 = leg_stand_jump_fwd_idle        ; mcFwd|mcFall
+  258 = leg_stand_jump_back_idle       ; mcBack|mcFall
+  260 = leg_stand_idle                 ; mcLStrafe|mcFall
+  261 = leg_stand_idle                 ; mcFwd|mcLStrafe|mcFall
+  262 = leg_stand_idle                 ; mcBack|mcLStrafe|mcFall
+  264 = leg_stand_jump_right_idle      ; mcRStrafe|mcFall
+  265 = leg_stand_jump_right_idle      ; mcFwd|mcRStrafe|mcFall
+  266 = leg_stand_idle                 ; mcBack|mcRStrafe|mcFall
+  272 = leg_stand_jump_idle            ; mcCrouch|mcFall
+  273 = leg_stand_jump_fwd_idle        ; mcFwd|mcCrouch|mcFall
+  274 = leg_stand_jump_back_idle       ; mcBack|mcCrouch|mcFall
+  276 = leg_stand_idle                 ; mcLStrafe|mcCrouch|mcFall
+  277 = leg_stand_idle                 ; mcFwd|mcLStrafe|mcCrouch|mcFall
+  278 = leg_stand_idle                 ; mcBack|mcLStrafe|mcCrouch|mcFall
+  280 = leg_stand_idle                 ; mcRStrafe|mcCrouch|mcFall
+  281 = leg_stand_idle                 ; mcFwd|mcRStrafe|mcCrouch|mcFall
+  282 = leg_stand_idle                 ; mcBack|mcRStrafe|mcCrouch|mcFall
+  288 = leg_stand_jump_idle            ; mcAccel|mcFall
+  289 = leg_stand_jump_fwd_idle        ; mcFwd|mcAccel|mcFall
+  290 = leg_stand_idle                 ; mcBack|mcAccel|mcFall
+  292 = leg_stand_idle                 ; mcLStrafe|mcAccel|mcFall
+  293 = leg_stand_idle                 ; mcFwd|mcLStrafe|mcAccel|mcFall
+  294 = leg_stand_idle                 ; mcBack|mcLStrafe|mcAccel|mcFall
+  296 = leg_stand_idle                 ; mcRStrafe|mcAccel|mcFall
+  297 = leg_stand_idle                 ; mcFwd|mcRStrafe|mcAccel|mcFall
+  298 = leg_stand_idle                 ; mcBack|mcRStrafe|mcAccel|mcFall
+  304 = leg_stand_jump_idle            ; mcCrouch|mcAccel|mcFall
+  305 = leg_stand_jump_fwd_idle        ; mcFwd|mcCrouch|mcAccel|mcFall
+  306 = leg_stand_idle                 ; mcBack|mcCrouch|mcAccel|mcFall
+  308 = leg_stand_idle                 ; mcLStrafe|mcCrouch|mcAccel|mcFall
+  309 = leg_stand_idle                 ; mcFwd|mcLStrafe|mcCrouch|mcAccel|mcFall
+  310 = leg_stand_idle                 ; mcBack|mcLStrafe|mcCrouch|mcAccel|mcFall
+  312 = leg_stand_idle                 ; mcRStrafe|mcCrouch|mcAccel|mcFall
+  313 = leg_stand_idle                 ; mcFwd|mcRStrafe|mcCrouch|mcAccel|mcFall
+  314 = leg_stand_idle                 ; mcBack|mcRStrafe|mcCrouch|mcAccel|mcFall
+  512 = leg_stand_jump_end             ; mcLanding
+  513 = leg_stand_jump_fwd_end         ; mcFwd|mcLanding
+  514 = leg_stand_jump_end             ; mcBack|mcLanding
+  516 = leg_stand_idle                 ; mcLStrafe|mcLanding
+  517 = leg_stand_idle                 ; mcFwd|mcLStrafe|mcLanding
+  518 = leg_stand_idle                 ; mcBack|mcLStrafe|mcLanding
+  520 = leg_stand_jump_right_end       ; mcRStrafe|mcLanding
+  521 = leg_stand_jump_right_end       ; mcFwd|mcRStrafe|mcLanding
+  522 = leg_stand_idle                 ; mcBack|mcRStrafe|mcLanding
+  528 = leg_stand_jump_end             ; mcCrouch|mcLanding
+  529 = leg_stand_jump_fwd_end         ; mcFwd|mcCrouch|mcLanding
+  530 = leg_stand_jump_end             ; mcBack|mcCrouch|mcLanding
+  532 = leg_stand_idle                 ; mcLStrafe|mcCrouch|mcLanding
+  533 = leg_stand_idle                 ; mcFwd|mcLStrafe|mcCrouch|mcLanding
+  534 = leg_stand_idle                 ; mcBack|mcLStrafe|mcCrouch|mcLanding
+  536 = leg_stand_idle                 ; mcRStrafe|mcCrouch|mcLanding
+  537 = leg_stand_idle                 ; mcFwd|mcRStrafe|mcCrouch|mcLanding
+  538 = leg_stand_idle                 ; mcBack|mcRStrafe|mcCrouch|mcLanding
+  544 = leg_stand_jump_end             ; mcAccel|mcLanding
+  545 = leg_stand_jump_fwd_end         ; mcFwd|mcAccel|mcLanding
+  546 = leg_stand_idle                 ; mcBack|mcAccel|mcLanding
+  548 = leg_stand_idle                 ; mcLStrafe|mcAccel|mcLanding
+  549 = leg_stand_idle                 ; mcFwd|mcLStrafe|mcAccel|mcLanding
+  550 = leg_stand_idle                 ; mcBack|mcLStrafe|mcAccel|mcLanding
+  552 = leg_stand_idle                 ; mcRStrafe|mcAccel|mcLanding
+  553 = leg_stand_idle                 ; mcFwd|mcRStrafe|mcAccel|mcLanding
+  554 = leg_stand_idle                 ; mcBack|mcRStrafe|mcAccel|mcLanding
+  560 = leg_stand_jump_end             ; mcCrouch|mcAccel|mcLanding
+  561 = leg_stand_jump_fwd_end         ; mcFwd|mcCrouch|mcAccel|mcLanding
+  562 = leg_stand_idle                 ; mcBack|mcCrouch|mcAccel|mcLanding
+  564 = leg_stand_idle                 ; mcLStrafe|mcCrouch|mcAccel|mcLanding
+  565 = leg_stand_idle                 ; mcFwd|mcLStrafe|mcCrouch|mcAccel|mcLanding
+  566 = leg_stand_idle                 ; mcBack|mcLStrafe|mcCrouch|mcAccel|mcLanding
+  568 = leg_stand_idle                 ; mcRStrafe|mcCrouch|mcAccel|mcLanding
+  569 = leg_stand_idle                 ; mcFwd|mcRStrafe|mcCrouch|mcAccel|mcLanding
+  570 = leg_stand_idle                 ; mcBack|mcRStrafe|mcCrouch|mcAccel|mcLanding
+ 2048 = leg_ladder_idle                ; mcClimb
+ 2049 = leg_ladder_up                  ; mcFwd|mcClimb
+ 2050 = leg_ladder_down                ; mcBack|mcClimb
+ 4097 = leg_stand_run_fwd              ; mcFwd|mcSprint
+ 4101 = leg_stand_run_left             ; mcFwd|mcLStrafe|mcSprint
+ 4105 = leg_stand_run_right            ; mcFwd|mcRStrafe|mcSprint
+ 4224 = leg_stand_run_fwd              ; mcJump|mcSprint
+ 4225 = leg_stand_run_fwd              ; mcFwd|mcJump|mcSprint
+ 4352 = leg_stand_jump_fwd_idle        ; mcFall|mcSprint
+ 4353 = leg_stand_jump_fwd_idle        ; mcFwd|mcFall|mcSprint
+ 4608 = leg_stand_jump_fwd_end         ; mcLanding|mcSprint
+ 4609 = leg_stand_jump_fwd_end         ; mcFwd|mcLanding|mcSprint

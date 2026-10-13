@@ -1,0 +1,198 @@
+-- ПРИБОР: ЧТО ВНУТРИ АПДЕЙТА СМАРТ-ТЕРРЕЙНА (05-10-2026).
+--
+-- 📏Switch v155: se_smart_terrain:update на чужих уровнях стоит 1.3-5.4 мс за
+-- раз (val_smart_monster_lair_6 ~5 мс каждые ~12 с, gar_dogs_lair_1 3.3), а
+-- движковый прибор [alife slow] видит только ВХОД в update. Здесь методы гулага
+-- и смарта оборачиваются таймерами; когда один апдейт смарта дольше порога,
+-- печатается строка [gulag prof] с ВКЛЮЧИТЕЛЬНЫМ временем методов внутри него.
+--
+-- Ставит движок: ogsr_gulag_prof.install(порог_мкс) при каждой новой lua_State
+-- (консольный al_gulag_prof_us, 0 = не ставить). Вне апдейта смарта обёртки
+-- зовут исходную функцию без замеров.
+
+local threshold_us = 2000
+local depth = 0
+local acc = {}
+local wrapped = {}
+
+local function note(label, dt)
+	local r = acc[label]
+	if r then
+		r[1] = r[1] + dt
+		r[2] = r[2] + 1
+	else
+		acc[label] = { dt, 1 }
+	end
+end
+
+-- Обёртка метода: замер только внутри апдейта смарта.
+local function wrap(tbl, key, label)
+	local f = tbl[key]
+	if type(f) ~= "function" then
+		return false
+	end
+	tbl[key] = function(...)
+		if depth == 0 then
+			return f(...)
+		end
+		local t0 = ogsr_clock_us()
+		local a, b, c = f(...)
+		note(label, ogsr_clock_us() - t0)
+		return a, b, c
+	end
+	return true
+end
+
+-- 📏ПК 05-10: у val_smart_monster_lair_7 почти весь апдейт -- ОДИН вызов
+-- pick_section_from_condlist (0.7-0.9 мс). Какой именно список -- видно только
+-- по его содержимому, поэтому самый долгий вызов за апдейт описывается текстом.
+local slow_cond_us, slow_cond_text = 0, nil
+
+local function describe_condlist(condlist)
+	local out = {}
+	for _, cond in pairs(condlist) do
+		local checks = {}
+		if type(cond.infop_check) == "table" then
+			for _, infop in pairs(cond.infop_check) do
+				if infop.fname then
+					table.insert(checks, (infop.expected == false and "!" or "=") .. tostring(infop.fname))
+				elseif infop.name then
+					table.insert(checks, (infop.required == false and "-" or "+") .. tostring(infop.name))
+				elseif infop.prob then
+					table.insert(checks, "~" .. tostring(infop.prob))
+				end
+			end
+		end
+		table.insert(out, "{" .. table.concat(checks, " ") .. "} " .. tostring(cond.section))
+	end
+	return table.concat(out, ", ")
+end
+
+local function wrap_condlist()
+	local f = xr_logic.pick_section_from_condlist
+	if type(f) ~= "function" then
+		return false
+	end
+	xr_logic.pick_section_from_condlist = function(actor, npc, condlist)
+		if depth == 0 then
+			return f(actor, npc, condlist)
+		end
+		local t0 = ogsr_clock_us()
+		local a, b, c = f(actor, npc, condlist)
+		local dt = ogsr_clock_us() - t0
+		note("condlist", dt)
+		if dt > slow_cond_us and type(condlist) == "table" then
+			slow_cond_us = dt
+			local ok, text = pcall(describe_condlist, condlist)
+			slow_cond_text = ok and text or "?"
+		end
+		return a, b, c
+	end
+	return true
+end
+
+local function smart_info(self)
+	local g = self.gulag
+	local pop, jobs, state = "?", "?", "?"
+	if g then
+		if g.get_population then
+			local ok, p = pcall(g.get_population, g)
+			if ok then pop = tostring(p) end
+		end
+		if g.Job then jobs = tostring(table.getn(g.Job)) end
+		state = tostring(g.state)
+	end
+	return string.format("pop %s jobs %s state %s working %s", pop, jobs, state, tostring(self.gulag_working))
+end
+
+local function report(self, dt)
+	local list = {}
+	for label, r in pairs(acc) do
+		table.insert(list, { label, r[1], r[2] })
+	end
+	table.sort(list, function(a, b) return a[2] > b[2] end)
+	local parts = {}
+	for i = 1, math.min(12, table.getn(list)) do
+		local e = list[i]
+		table.insert(parts, string.format("%s %.2f (x%d)", e[1], e[2] / 1000, e[3]))
+	end
+	local name = "?"
+	pcall(function() name = self:name() end)
+	local cond = ""
+	if slow_cond_text then
+		cond = string.format(" | slowest condlist %.2f ms: %s", slow_cond_us / 1000, string.sub(slow_cond_text, 1, 300))
+	end
+	log1(string.format("~ [gulag prof] %s update %.2f ms | %s | %s%s", name, dt / 1000, smart_info(self), table.concat(parts, " | "), cond))
+end
+
+-- Верхний уровень: se_smart_terrain:update. Только он открывает замер.
+local function wrap_top(cls, key)
+	local f = cls[key]
+	if type(f) ~= "function" then
+		return false
+	end
+	cls[key] = function(self, ...)
+		if depth > 0 then
+			return f(self, ...)
+		end
+		depth = 1
+		acc = {}
+		slow_cond_us, slow_cond_text = 0, nil
+		local t0 = ogsr_clock_us()
+		local ok, a, b = pcall(f, self, ...)
+		local dt = ogsr_clock_us() - t0
+		depth = 0
+		if dt >= threshold_us then
+			pcall(report, self, dt)
+		end
+		if not ok then
+			error(a, 0)
+		end
+		return a, b
+	end
+	return true
+end
+
+local gulag_methods = {
+	"update", "update_objs", "update_beginning_jobs", "can_obj_begin_job", "changeState",
+	"updateJob", "prepare_available_jobs", "get_available_objs", "availJob", "availCurrent",
+	"availState", "calc_distance_table", "assign_jobs_using_distance_table",
+	"try_to_fill_free_high_prior_jobs", "find_obj_on_jobLow_for_jobHigh", "find_nearest_suitable_obj",
+	"distance_to_job_location", "get_obj_game_vertex_and_position", "setJob", "beginJob",
+	"free_obj", "free_obj_and_reinit", "prepare_jobs", "prepare_jobs_for_new_state",
+	"object_setup_offline", "object_setup_online", "setup_logic", "setup_squad_and_group",
+	"set_restrictions", "clear_dead", "get_population",
+}
+
+local smart_methods = {
+	"is_gulag_available", "unregister_npc", "register_npc", "remove_gulag", "create_gulag",
+	"reset_npc_logic", "task",
+}
+
+local function do_install(us)
+	threshold_us = us
+	if wrapped.done then
+		return
+	end
+	wrapped.done = true
+
+	local n = 0
+	local G = xr_gulag.gulag
+	for _, m in ipairs(gulag_methods) do
+		if wrap(G, m, "gulag." .. m) then n = n + 1 end
+	end
+	local S = smart_terrain.se_smart_terrain
+	for _, m in ipairs(smart_methods) do
+		if wrap(S, m, "smart." .. m) then n = n + 1 end
+	end
+	if wrap_condlist() then n = n + 1 end
+	local top = wrap_top(S, "update")
+	log1(string.format("~ [gulag prof] wrapped %d methods, top-level smart update %s, threshold %d us", n, tostring(top), us))
+end
+
+function install(us)
+	local ok, err = pcall(do_install, us)
+	if not ok then
+		log1("! [gulag prof] install failed: " .. tostring(err))
+	end
+end

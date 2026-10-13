@@ -1,0 +1,99 @@
+; Vulkan renderer quality preset - MINIMUM
+;
+; Loaded by the `_preset` row of the options screen (CCC_PresetVK -> cfg_load).
+; A NEW file name on purpose: the mod's archives carry rspec_minimum.ltx and
+; friends, written for the DX renderer, and two thirds of what they set is not
+; read by a single line of Layers/xrRenderVulkan. Loading those was the same
+; placebo the rest of this screen used to be.
+;
+; Every line below is a console entry this renderer actually reads. Ordered the
+; way the advanced page is: scaling, shadows, shading, light, volume, plants,
+; surfaces, water, image, resources.
+
+r_render_scale 0.67
+r_aa_mode dlss_performance
+r_dlss_preset 6
+r_dlss_sharp 0.4
+
+; *** SHADOWS. Was sixteen lines here; it is one now, and the one also
+; reaches the entries the sixteen never did - r_vsm_tree_wind(_dist) (the
+; radius inside which a crown is re-rasterised every frame instead of being
+; read from the static cache: VSM/DynTrees was 4.20 of 8.57 ms on a 780M),
+; r_vsm_cadence, r_vsm_base and the r_vsm_throttle budget.
+; One authority on purpose: the shadow row of the options screen DERIVES
+; which tier is on from these values, so a preset that set half of them by
+; hand would leave that row reading "Custom" right after a fresh pick.
+r_shadows Low
+r_sun_grass_dist 10.
+
+r_ssao 0
+r2_ssao st_opt_low
+r_ssao_strength 1.5
+r_ssao_temporal 0.9
+r_ssil 0
+r_ssil_strength 0.5
+r_spec_occ 0.
+r_ibl 0
+r_sky_sh 0
+
+; *** GI CHAIN. No preset ever touched it - and on a GPU with no ray-tracing
+; headroom it is the single most expensive line in the file. Measured on a
+; Radeon 780M (pripyat_full, 2560x1600): Gather 6.62 + DDGI 2.21 + WRC 0.46
+; = 9.3 ms out of a 75 ms frame, and the presets could not reach any of it.
+; Why the line was missing: r_ddgi / r_gather / r_wrc are NoSave cvars, so
+; they never appear in a saved config and nobody thought to put them here.
+; The r_gi COMMAND gets around that - cfg_load runs it like any console line.
+; off = tear the producers down | 1 probes | 2 + final gather | 3 + world cache
+r_gi off
+
+; Draw distance. far_plane_render = the weather far_plane (~400 m) TIMES this.
+; The 8.0 default was measured free on a 4070-class laptop; on a weak GPU in
+; forest it is the VSM caster set, the cull walk and the HZB, and it is not.
+rs_vis_distance 1.5
+
+r_light_cones 0
+r_light_cone_density 1.
+r_flashlight_glow 1.
+
+r_vol 0
+r_vol_intensity 3.
+r_vol_ms 1
+r_vol_ta 1
+r_vol_upsample 0
+r_vol_mist 0.
+r_vol_smoke 0.
+r_vol_smoke_shadow 0.
+r_clouds 0
+r_clouds_steps 16
+r_rain 1
+
+r_tree_dist 120.
+r_tree_hzb 1
+r_tree_shade_dist 40.
+r__detail_density 0.9
+r__detail_radius 70
+r__detail_scale 1.
+r_grass_aref 0.6
+r_wind_tree_bend 0.
+r_hzb_cull 1
+r_vrs 2
+
+r_pom 0
+r_pom_steps 8.
+r_pom_terrain 0
+r_bump 1.
+r_terrain_detail_dist 40.
+r_wet_dist 60.
+r_wet_refl 0.3
+r_puddle_level 0.3
+r_snow_deform 0
+
+r_wtr 1
+r_wtr_tess 8.
+r_wtr_refl 0.
+r_wtr_caustic 0.
+r_wtr_sim 0
+
+r_dither 1.
+r_txstream 1
+r_gpu_particles 0

@@ -1,0 +1,326 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{A8DCB3B1-7324-43E4-91D9-F96587AE4E4C}</ProjectGuid>
+    <RootNamespace>xrRender_Vulkan</RootNamespace>
+    <Keyword>Win32Proj</Keyword>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <Import Project="..\..\Engine_lib_properties.props" />
+  <Import Project="..\..\..\3rd_party\Src\vulkan_renderer.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkIncremental>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkIncremental>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;_USRDLL;XRENGINE_STATIC;XRCORE_STATIC;XRCDB_STATIC;XR_PARTICLES_STATIC;LUABIND_STATIC;XRRENDER_STATIC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <WarningLevel>Level4</WarningLevel>
+      <DisableSpecificWarnings>4456;4457;4458;4459;4315;4267;</DisableSpecificWarnings>
+      <AdditionalIncludeDirectories>./;..\..\xrCore;..\..\Luabind;..\..\LuaJIT\src;$(SolutionDir)\3rd_party\Src\NVIDIA_DLSS\DLSS\include;$(SolutionDir)\3rd_party\Src\AMD_FidelityFX\sdk\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <WholeProgramOptimization>true</WholeProgramOptimization>
+      <AdditionalIncludeDirectories>./;..\..\xrCore;..\..\Luabind;..\..\LuaJIT\src;$(SolutionDir)\3rd_party\Src\NVIDIA_DLSS\DLSS\include;$(SolutionDir)\3rd_party\Src\AMD_FidelityFX\sdk\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;XRENGINE_STATIC;XRCORE_STATIC;XRCDB_STATIC;XR_PARTICLES_STATIC;LUABIND_STATIC;XRRENDER_STATIC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <StringPooling>true</StringPooling>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <WarningLevel>Level4</WarningLevel>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <DisableSpecificWarnings>4456;4457;4458;4995;4577;4315;4267;</DisableSpecificWarnings>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="..\xrRender\xrVertexDeclTypes.h" />
+    <ClInclude Include="..\..\Include\xrRender\DebugRender.h" />
+    <ClInclude Include="..\..\Include\xrRender\DrawUtils.h" />
+    <ClInclude Include="..\..\Include\xrRender\RenderDeviceRender.h" />
+    <ClInclude Include="..\..\Include\xrRender\RenderFactory.h" />
+    <ClInclude Include="..\..\Include\xrRender\UIRender.h" />
+    <ClInclude Include="CRender_Vulkan.h" />
+    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="HW_Vulkan.h" />
+    <ClInclude Include="HWCaps_Vulkan.h" />
+    <ClInclude Include="SH_RT_Vulkan.h" />
+    <ClInclude Include="vk_RenderDeviceRender.h" />
+    <ClInclude Include="vk_RenderFactory.h" />
+    <ClInclude Include="vk_barriers.h" />
+    <ClInclude Include="vk_command_buffer.h" />
+    <ClInclude Include="vk_compute_util.h" />
+    <ClInclude Include="vk_core.h" />
+    <ClInclude Include="vk_gfx_pipeline.h" />
+    <ClInclude Include="vk_image.h" />
+    <ClInclude Include="vk_swapchain.h" />
+    <ClInclude Include="vk_sync.h" />
+    <ClInclude Include="vk_stub.h" />
+    <ClInclude Include="vk_cluster_stream.h" />
+    <ClInclude Include="vk_texture_stream.h" />
+    <ClInclude Include="vk_vram_stats.h" />
+    <ClInclude Include="vk_UIPipeline.h" />
+    <ClInclude Include="vk_ui_shader.h" />
+    <ClInclude Include="vk_Visual.h" />
+    <ClInclude Include="vk_ModelPool.h" />
+    <ClInclude Include="vk_FBasicVisual.h" />
+    <ClInclude Include="vk_pass_context.h" />
+    <ClInclude Include="vk_pass_registry.h" />
+    <ClInclude Include="vk_pass_secondary.h" />
+    <ClInclude Include="vk_pass_deps.h" />
+    <ClInclude Include="vk_rendering.h" />
+    <ClInclude Include="vk_cull.h" />
+    <ClInclude Include="vk_exposure.h" />
+    <ClInclude Include="vk_fullscreen.h" />
+    <ClInclude Include="vk_pass_world.h" />
+    <ClInclude Include="vk_env_light.h" />
+    <ClInclude Include="vk_deform.h" />
+    <ClInclude Include="vk_terrain_cache.h" />
+    <ClInclude Include="vk_pass_snow.h" />
+    <ClInclude Include="vk_light.h" />
+    <ClInclude Include="vk_shadow.h" />
+    <ClInclude Include="vk_pass_shadow.h" />
+    <ClInclude Include="vk_pass_lightcones.h" />
+    <ClInclude Include="vk_pass_capsule_shadow.h" />
+    <ClInclude Include="vk_nx_bench.h" />
+    <ClInclude Include="vk_pass_water.h" />
+    <ClInclude Include="vk_water_ripple.h" />
+    <ClInclude Include="vk_water_fft.h" />
+    <ClInclude Include="vk_pass_sky.h" />
+    <ClInclude Include="vk_scene_color.h" />
+    <ClInclude Include="vk_pass_tonemap.h" />
+    <ClInclude Include="vk_pass_bloom.h" />
+    <ClInclude Include="vk_ddgi.h" />
+    <ClInclude Include="vk_gi_froxel.h" />
+    <ClInclude Include="vk_gi_probe.h" />
+    <ClInclude Include="vk_pass_gather.h" />
+    <ClInclude Include="vk_wrc.h" />
+    <ClInclude Include="vk_pass_rtao.h" />
+    <ClInclude Include="vk_pass_rtgi.h" />
+    <ClInclude Include="vk_pass_ssao.h" />
+    <ClInclude Include="vk_rt_scene.h" />
+    <ClInclude Include="vk_rt_dyn.h" />
+    <ClInclude Include="vk_rt_world.h" />
+    <ClInclude Include="vk_motionvec.h" />
+    <ClInclude Include="vk_rr_guides.h" />
+    <ClInclude Include="vk_dlss.h" />
+    <ClInclude Include="vk_fsr.h" />
+    <ClInclude Include="vk_sl.h" />
+    <ClInclude Include="vk_gpu_particles.h" />
+    <ClInclude Include="vk_parallel.h" />
+    <ClInclude Include="vk_pipeline_cache.h" />
+    <ClInclude Include="vk_render_queue.h" />
+    <ClInclude Include="vk_world_material.h" />
+    <ClInclude Include="vk_KinematicsStub.h" />
+    <ClInclude Include="vk_authorship.h" />
+    <ClInclude Include="vk_profiler.h" />
+    <ClInclude Include="vk_imgui.h" />
+    <ClInclude Include="vk_vrs.h" />
+    <ClInclude Include="vk_vsm.h" />
+    <ClInclude Include="vk_shadow_gpu.h" />
+    <ClInclude Include="vk_instance_gpu.h" />
+    <ClInclude Include="vk_world_gpu.h" />
+    <ClInclude Include="vk_clustered.h" />
+    <ClInclude Include="vk_color_space.h" />
+    <ClInclude Include="vk_ibl.h" />
+    <ClInclude Include="vk_clouds.h" />
+    <ClInclude Include="vk_volumetrics.h" />
+    <ClInclude Include="vk_framegraph.h" />
+    <ClInclude Include="vk_async.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="CRender_Vulkan.cpp" />
+    <ClCompile Include="vk_profiler.cpp" />
+    <ClCompile Include="vk_imgui.cpp" />
+    <ClCompile Include="vk_vrs.cpp" />
+    <ClCompile Include="vk_vram_stats.cpp" />
+    <ClCompile Include="vk_vsm.cpp" />
+    <ClCompile Include="vk_shadow_gpu.cpp" />
+    <ClCompile Include="vk_instance_gpu.cpp" />  <!-- GPU-driven instanced rigid casters (host/editor scenes) -->
+    <ClCompile Include="vk_world_gpu.cpp" />
+    <ClCompile Include="vk_clustered.cpp" />
+    <ClCompile Include="vk_ibl.cpp" />          <!-- sky specular IBL prefilter (compute) -->
+    <ClCompile Include="vk_clouds.cpp" />       <!-- volumetric cloud noise bake (compute) -->
+    <ClCompile Include="vk_volumetrics.cpp" />
+    <ClCompile Include="vk_framegraph.cpp" />   <!-- render graph: frame-wide resource-state tracker -->
+    <ClCompile Include="vk_pass_registry.cpp" /> <!-- pass registry + declared-dependency validator -->
+    <ClCompile Include="vk_pass_secondary.cpp" /> <!-- secondary command buffers per pass (r_mt_record) -->
+    <ClCompile Include="vk_async.cpp" />        <!-- async compute foundation (cross-queue timeline) -->
+    <ClCompile Include="stdafx.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="HW_Vulkan.cpp" />
+    <ClCompile Include="vk_authorship.cpp" />
+    <ClCompile Include="HWCaps_Vulkan.cpp" />
+    <ClCompile Include="vk_DebugRender.cpp" />
+    <ClCompile Include="vk_DrawUtils.cpp" />
+    <ClCompile Include="vk_barriers.cpp" />
+    <ClCompile Include="vk_buffer.cpp" />
+    <ClCompile Include="vk_buffer_pool.cpp" />
+    <ClCompile Include="vk_command_buffer.cpp" />
+    <ClCompile Include="vk_compute_util.cpp" />
+    <ClCompile Include="vk_console_min.cpp" />
+    <ClCompile Include="vk_core.cpp" />
+    <ClCompile Include="vk_gfx_pipeline.cpp" />
+    <ClCompile Include="vk_image.cpp" />
+    <ClCompile Include="vk_descriptors.cpp" />
+    <ClCompile Include="vk_fullscreen.cpp" />
+    <ClCompile Include="vk_DynamicStream.cpp" />
+    <ClCompile Include="vk_ring_allocator.cpp" />
+    <ClCompile Include="vk_shader.cpp" />
+    <ClCompile Include="vk_shaders.cpp" />
+    <ClCompile Include="vk_texture.cpp" />
+    <ClCompile Include="vk_cluster_stream.cpp" />
+    <ClCompile Include="vk_texture_stream.cpp" />
+    <ClCompile Include="vk_UIPipeline.cpp" />
+    <ClCompile Include="vk_vertex_formats.cpp" />
+    <ClCompile Include="vk_engine_stubs.cpp" />
+    <ClCompile Include="vk_RenderDeviceRender.cpp" />
+    <ClCompile Include="vk_RenderFactory.cpp" />
+    <ClCompile Include="vk_swapchain.cpp" />
+    <ClCompile Include="vk_sync.cpp" />
+    <ClCompile Include="vk_UIRender.cpp" />
+    <ClCompile Include="vk_Visual.cpp" />
+    <ClCompile Include="vk_ModelPool.cpp" />
+    <ClCompile Include="rvk_loader.cpp" />
+    <ClCompile Include="vk_pass_world.cpp" />
+    <ClCompile Include="vk_pass_sky.cpp" />
+    <ClCompile Include="vk_scene_color.cpp" />
+    <ClCompile Include="vk_pass_tonemap.cpp" />
+    <ClCompile Include="vk_pass_bloom.cpp" />
+    <ClCompile Include="vk_ddgi.cpp" />
+    <ClCompile Include="vk_gi_froxel.cpp" />
+    <ClCompile Include="vk_gi_probe.cpp" />
+    <ClCompile Include="vk_hom.cpp" />
+    <ClCompile Include="vk_hzb_readback.cpp" />
+    <ClCompile Include="vk_pass_gather.cpp" />
+    <ClCompile Include="vk_wrc.cpp" />
+    <ClCompile Include="vk_pass_rtao.cpp" />
+    <ClCompile Include="vk_pass_rtgi.cpp" />
+    <ClCompile Include="vk_pass_ssao.cpp" />
+    <ClCompile Include="vk_rt_scene.cpp" />
+    <ClCompile Include="vk_rt_dyn.cpp" />
+    <ClCompile Include="vk_rt_world.cpp" />
+    <ClCompile Include="vk_motionvec.cpp" />
+    <ClCompile Include="vk_rr_guides.cpp" />
+    <ClCompile Include="vk_dlss.cpp" />
+    <ClCompile Include="vk_fsr.cpp" />
+    <ClCompile Include="vk_sl.cpp" />
+    <ClCompile Include="vk_gpu_particles.cpp" />
+    <ClCompile Include="vk_gpu_particles_translate.cpp" />
+    <ClCompile Include="vk_gpu_particles_feed.cpp" />
+    <ClCompile Include="vk_pass_skinned.cpp" />
+    <ClCompile Include="vk_env_light.cpp" />
+    <ClCompile Include="vk_light.cpp" />
+    <ClCompile Include="vk_shadow.cpp" />
+    <ClCompile Include="vk_pass_shadow.cpp" />
+    <ClCompile Include="vk_pass_lightcones.cpp" />
+    <ClCompile Include="vk_pass_capsule_shadow.cpp" />
+    <ClCompile Include="vk_nx_bench.cpp" />
+    <ClCompile Include="vk_pass_water.cpp" />
+    <ClCompile Include="vk_water_ripple.cpp" />
+    <ClCompile Include="vk_water_fft.cpp" />
+    <ClCompile Include="vk_pipeline_cache.cpp" />
+    <ClCompile Include="vk_render_queue.cpp" />
+    <ClCompile Include="vk_world_material.cpp" />
+    <ClCompile Include="vk_KinematicsStub.cpp" />
+    <ClCompile Include="vk_R_Backend_min.cpp" />
+    <ClCompile Include="vk_FHierrarhyVisual.cpp" />
+    <ClCompile Include="vk_SkeletonX.cpp" />
+    <ClCompile Include="vk_SkeletonStubs.cpp" />
+    <ClCompile Include="vk_SkeletonRigid.cpp" />
+    <ClCompile Include="vk_SkeletonCustom.cpp" />
+    <ClCompile Include="vk_SkeletonAnimated.cpp" />
+
+    <!-- Particle system (dedicated vk classes on PAPI; see vk_Particles.h).
+         vk_ParticleEffectDef.cpp  : standalone PS::CPEDef/CPGDef impls (no R4 shader res)
+         vk_ParticleEffectActions.cpp / vk_PSLibrary.cpp : compat-compiled shared sources
+         vk_ParticleEffect/Group.cpp : the simulated billboard visuals
+         vk_pass_particles.cpp       : the billboard render pass -->
+    <ClCompile Include="vk_ParticleEffectDef.cpp" />
+    <ClCompile Include="vk_ParticleEffectActions.cpp" />
+    <ClCompile Include="vk_PSLibrary.cpp" />
+    <ClCompile Include="vk_ParticleGroup.cpp" />
+    <ClCompile Include="vk_ParticleEffect.cpp" />
+    <ClCompile Include="vk_pass_particles.cpp" />
+    <ClCompile Include="vk_wallmarks.cpp" />    <!-- static decals (bullet holes) — R4 CWallmarksEngine port -->
+    <ClCompile Include="vk_rain.cpp" />         <!-- rain drops/splashes + thunderbolt (dxRainRender port) -->
+    <ClCompile Include="vk_water_sim.cpp" />    <!-- shallow-water flow/accumulation sim (compute) -->
+    <ClCompile Include="vk_deform.cpp" />       <!-- snow deform press field (compute) -->
+    <ClCompile Include="vk_terrain_cache.cpp" /> <!-- terrain composite cache bake (compute) -->
+    <ClCompile Include="vk_pass_snow.cpp" />    <!-- dense snow surface mesh (VHM-style) -->
+
+    <ClCompile Include="vk_Detail.cpp" />
+    <ClCompile Include="vk_DetailManager.cpp" />
+    <ClCompile Include="vk_DetailManager_Render.cpp" />
+    <ClCompile Include="vk_TreeManager.cpp" />
+    <ClCompile Include="vk_TreeManager_Render.cpp" />
+    <ClCompile Include="vk_TreeManager_Stats.cpp" />
+    <ClCompile Include="vk_LODManager.cpp" />
+    <ClCompile Include="..\xrRender\ETextureParams.cpp" />
+    <ClCompile Include="..\xrRender\Animation.cpp" />  <!-- animation::channels for CKinematicsAnimated -->
+    <ClCompile Include="vma_impl.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="vk_meshopt.cpp">  <!-- vendored meshoptimizer amalgamation (cluster-LOD) -->
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="xrRender_Vulkan.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\xrCDB\xrCDB.vcxproj">
+      <Project>{a19b1df2-82ec-4364-8bdf-85d13a1c89b5}</Project>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+    <ProjectReference Include="..\..\xrCore\xrCore.vcxproj">
+      <Project>{a0f7d1fb-59a7-4717-a7e4-96f37e91998e}</Project>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets" />
+</Project>
