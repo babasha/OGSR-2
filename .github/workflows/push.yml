@@ -62,7 +62,7 @@ jobs:
         
         7z a -t7z -m0=LZMA2:d=96m:fb=273 -mx=9 -mmt=2 ..\..\%OGSR_ARTIFACT_NAME% .\
     - name: Upload OGSR artifact
-      uses: actions/upload-artifact@v7.0.1
+      uses: actions/upload-artifact@v7.0.2
       with:
         name: OGSR2_Engine_${{ matrix.Platform }}_3.${{ github.run_number }}_${{ matrix.Configuration }}.7z
         path: .\OGSR2_Engine_${{ matrix.Platform }}_3.${{ github.run_number }}_${{ matrix.Configuration }}.7z
