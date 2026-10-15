@@ -1,0 +1,42 @@
+<rml>
+<head>
+    <title>touch</title>
+    <link type="text/rcss" href="touch.rcss"/>
+</head>
+
+<!--
+    Touch controls for phones (14-10), "like the mobile RE7, a minimum". Only DRAWS and gives the boxes: the fingers
+    are read by xrGame/ui_rml_touch.cpp, which takes every button's border box from here as its hit area (a little
+    bigger), so moving or resizing a button in the .rcss moves what a finger hits too.
+
+    Contract with ui_rml_touch.cpp:
+        t-stick / t-knob   the floating stick: rests at its place in the .rcss, jumps under the finger that lands on
+                           the left part of the screen (left/top set inline), the knob follows the finger
+        t-fire             fire (held); a drag on it turns the camera too
+        t-aim              aim, toggled by a tap
+        t-reload           reload (a tap), held = the next ammo type
+        t-crouch           crouch (a tap), held = the deep crouch
+        t-use              use / pick up / talk: class "off" while there is nothing to use; its text is the data-*
+                           attribute for what is in front (take, talk, search, open, drive, drag, use)
+        t-weapon           a tap = the next weapon, held = the weapon wheel (a drag on it picks the sector)
+        t-inv              the inventory
+        t-pause            the pause menu
+    Anywhere else on the right part of the screen a drag turns the camera; a tap on the minimap opens the map, a tap
+    on a quick slot uses it (those boxes come from hud.rml).
+-->
+
+<body id="touch">
+    <div id="t-stick"><div id="t-knob"/></div>
+
+    <div id="t-pause" class="tbtn small">II</div>
+    <div id="t-inv" class="tbtn small">ИНВ</div>
+
+    <div id="t-use" class="tbtn mid off" data-take="ВЗЯТЬ" data-talk="ГОВОРИТЬ" data-search="ОБЫСК"
+         data-open="ОТКРЫТЬ" data-drive="СЕСТЬ" data-drag="ТАЩИТЬ" data-use="ИСПОЛЬЗ.">ВЗЯТЬ</div>
+    <div id="t-weapon" class="tbtn mid">ОРУЖИЕ</div>
+    <div id="t-aim" class="tbtn mid">ПРИЦЕЛ</div>
+    <div id="t-reload" class="tbtn mid">ПЕРЕЗАР.</div>
+    <div id="t-crouch" class="tbtn mid">ПРИСЕД</div>
+    <div id="t-fire" class="tbtn big">ОГОНЬ</div>
+</body>
+</rml>

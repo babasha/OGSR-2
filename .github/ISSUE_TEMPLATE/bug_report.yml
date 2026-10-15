@@ -1,0 +1,46 @@
+name: Ошибка / Bug report
+description: Вылет, зависание, артефакт рендера, неправильное поведение
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Платформа / Platform
+      options:
+        - Windows x64
+        - Nintendo Switch
+        - Android
+        - Linux
+    validations:
+      required: true
+  - type: input
+    id: build
+    attributes:
+      label: Сборка / Build
+      description: Коммит или версия (строка в начале лога)
+      placeholder: "например, 2b01c11"
+  - type: input
+    id: gpu
+    attributes:
+      label: Видеокарта и драйвер / GPU and driver
+      placeholder: "RTX 4070, 576.52"
+  - type: textarea
+    id: what
+    attributes:
+      label: Что случилось / What happened
+      description: Что делали, что ожидали, что получили
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Как повторить / Steps to reproduce
+      placeholder: |
+        1. Загрузить сейв на Кордоне
+        2. ...
+  - type: textarea
+    id: log
+    attributes:
+      label: Лог / Log
+      description: Хвост лога движка (appdata/logs) или текст вылета
+      render: text

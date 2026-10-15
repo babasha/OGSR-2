@@ -1,0 +1,67 @@
+/* Touch controls (14-10): see touch.rml. In the HUD's space -- 1dp grows with the panel's density on a phone
+ * (ui_rml.cpp hud_scale), so the sizes here are what a thumb gets. The bottom-right corner keeps clear of the
+ * HUD's health bar and quick slots (about 270 x 95 dp), the top-left of the minimap. */
+
+body
+{
+    display: block;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    font-family: rml_roboto;
+    font-size: 14dp;
+    color: #d6c7a1;
+}
+
+.tbtn
+{
+    display: block;
+    position: absolute;
+    text-align: center;
+    background-color: rgba(18, 18, 16, 110);
+    border: 2dp rgba(214, 199, 161, 150);
+    letter-spacing: 1dp;
+}
+.tbtn.held { background-color: rgba(214, 199, 161, 110); color: #1a1a16; }
+.tbtn.on   { border-color: #e0a030; color: #e0a030; }
+.tbtn.off  { display: none; }
+
+.big   { width: 112dp; height: 112dp; line-height: 112dp; border-radius: 56dp; font-size: 16dp; }
+.mid   { width: 78dp;  height: 78dp;  line-height: 78dp;  border-radius: 39dp; font-size: 12dp; }
+.small { width: 54dp;  height: 54dp;  line-height: 54dp;  border-radius: 27dp; font-size: 18dp; }
+
+#t-fire   { right: 34dp;  bottom: 116dp; }
+#t-aim    { right: 160dp; bottom: 132dp; }
+#t-reload { right: 52dp;  bottom: 246dp; }
+#t-crouch { right: 254dp; bottom: 116dp; }
+#t-use    { right: 300dp; bottom: 300dp; }
+#t-weapon { right: 150dp; bottom: 236dp; }
+#t-pause  { right: 24dp;  top: 22dp; }
+#t-inv    { right: 92dp;  top: 22dp; font-size: 13dp; }
+
+#t-stick
+{
+    display: block;
+    position: absolute;
+    left: 96dp;
+    bottom: 80dp;
+    width: 170dp;
+    height: 170dp;
+    border-radius: 85dp;
+    border: 2dp rgba(214, 199, 161, 90);
+    background-color: rgba(18, 18, 16, 50);
+}
+#t-stick.active { border-color: rgba(214, 199, 161, 170); background-color: rgba(18, 18, 16, 80); }
+#t-knob
+{
+    display: block;
+    position: absolute;
+    left: 49dp;
+    top: 49dp;
+    width: 72dp;
+    height: 72dp;
+    border-radius: 36dp;
+    background-color: rgba(214, 199, 161, 120);
+}

@@ -1,0 +1,11 @@
+#include "StdAfx.h"
+#include "Scope.h"
+
+CScope::CScope() {}
+
+CScope::~CScope() {}
+
+using namespace luabind;
+
+
+void CScope::script_register(lua_State* L) { module(L)[class_<CScope, CGameObject>("CScope").def(constructor<>())]; }

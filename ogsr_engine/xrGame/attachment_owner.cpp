@@ -1,0 +1,209 @@
+////////////////////////////////////////////////////////////////////////////
+//	Module 		: attachment_owner.cpp
+//	Created 	: 12.02.2004
+//  Modified 	: 12.02.2004
+//	Author		: Dmitriy Iassenev
+//	Description : Attachment owner
+////////////////////////////////////////////////////////////////////////////
+
+#include "StdAfx.h"
+#include "attachment_owner.h"
+#include "attachable_item.h"
+#include "../Include/xrRender/Kinematics.h"
+#include "inventory_item.h"
+#include "PhysicsShellHolder.h"
+
+CAttachmentOwner::~CAttachmentOwner() {}
+
+void CAttachmentOwner::reload(LPCSTR section)
+{
+    if (!pSettings->line_exist(section, "attachable_items"))
+    {
+        m_attach_item_sections.clear();
+        return;
+    }
+
+    LPCSTR attached_sections = pSettings->r_string(section, "attachable_items");
+    u32 item_count = _GetItemCount(attached_sections);
+    string256 current_item_section;
+    m_attach_item_sections.resize(item_count);
+    for (u32 i = 0; i < item_count; ++i)
+        m_attach_item_sections[i] = _GetItem(attached_sections, i, current_item_section);
+}
+
+void CAttachmentOwner::reinit() { VERIFY(m_attached_objects.empty()); }
+
+void CAttachmentOwner::net_Destroy()
+{
+    R_ASSERT(attached_objects().empty());
+}
+
+void CAttachmentOwner::renderable_Render(u32 context_id, IRenderable* root)
+{
+    // ⛔A guard that refused to draw body-sized UNANIMATED attachments lived here
+    // for one build and was REVERTED, because the reasoning under it did not
+    // survive its own measurement.
+    //
+    // The claim was "the phantom body rides on the NPCs and comes from their
+    // gear", supported by three probes: teleport the squad, strip their gear, hand
+    // back a weapon only. All three were read through a SAMPLED renderer census
+    // whose window also covered frames from BEFORE each command -- so "the phantom
+    // vanished" is equally explained by "those objects left the view". When live
+    // positions were finally compared, the three phantoms sat 80 m from the
+    // creatures. The guard also never fired once: what these creatures carry has
+    // no such skeleton.
+    //
+    // ⭐Nothing about the owner of that geometry is established yet. Fix the
+    // INSTRUMENT before the code: the UNANIMATED diagnostic in vk_pass_skinned.cpp
+    // prints each visual ONCE, so its coordinates are a first-sight snapshot --
+    // which is precisely what manufactured the false correlation.
+    for (auto* obj : m_attached_objects)
+        obj->renderable_Render(context_id, root);
+}
+
+void __stdcall AttachmentCallback(IKinematics* tpKinematics)
+{
+    CGameObject* game_object = smart_cast<CGameObject*>(static_cast<CObject*>(tpKinematics->GetUpdateCallbackParam()));
+    VERIFY(game_object);
+
+    CAttachmentOwner* attachment_owner = smart_cast<CAttachmentOwner*>(game_object);
+    VERIFY(attachment_owner);
+
+    IKinematics* kinematics = smart_cast<IKinematics*>(game_object->Visual());
+
+    for (const auto* it : attachment_owner->attached_objects())
+    {
+        Fmatrix bone_mtx = kinematics->LL_GetBoneInstance(it->bone_id()).mTransform;
+        it->item().object().XFORM().mul_43(bone_mtx, it->offset());
+        it->item().object().XFORM().mulA_43(game_object->XFORM());
+    }
+}
+
+void CAttachmentOwner::attach(CInventoryItem* inventory_item)
+{
+    xr_vector<CAttachableItem*>::const_iterator I = m_attached_objects.begin();
+    xr_vector<CAttachableItem*>::const_iterator E = m_attached_objects.end();
+    for (; I != E; ++I)
+    {
+        //		if( (*I)->item().object().ID() != inventory_item->object().ID() )
+        if ((*I)->item().object().ID() == inventory_item->object().ID())
+            return; // already attached, fake, I'll repair It
+        //		VERIFY								((*I)->ID() != inventory_item->object().ID());
+    }
+
+    if (can_attach(inventory_item))
+    {
+        CAttachableItem* attachable_item = smart_cast<CAttachableItem*>(inventory_item);
+        VERIFY(attachable_item);
+        CGameObject* game_object = smart_cast<CGameObject*>(this);
+        VERIFY(game_object && game_object->Visual());
+        if (m_attached_objects.empty())
+            game_object->add_visual_callback(AttachmentCallback);
+        // Bone-less stub visual → LL_BoneID returns BI_NONE for every name.
+        // Skip silently; the attachment just doesn't get parented to a bone.
+        auto* k_check = smart_cast<IKinematics*>(game_object->Visual());
+        if (!k_check || k_check->LL_BoneCount() == 0) return;
+        const u16 bone_id = k_check->LL_BoneID(attachable_item->bone_name());
+        ASSERT_FMT(bone_id != BI_NONE, "!![%s] attach_bone_name [%s] in section [%s] not found in game object [%s] with visual [%s]", __FUNCTION__,
+                   attachable_item->bone_name().c_str(), smart_cast<CGameObject*>(inventory_item)->cNameSect().c_str(), game_object->cNameSect().c_str(),
+                   game_object->Visual()->getDebugName().c_str());
+        attachable_item->set_bone_id(bone_id);
+        m_attached_objects.push_back(smart_cast<CAttachableItem*>(inventory_item));
+
+        inventory_item->object().setVisible(true);
+        attachable_item->afterAttach();
+    }
+}
+
+void CAttachmentOwner::detach(CInventoryItem* inventory_item)
+{
+    xr_vector<CAttachableItem*>::iterator I = m_attached_objects.begin();
+    xr_vector<CAttachableItem*>::iterator E = m_attached_objects.end();
+    for (; I != E; ++I)
+    {
+        CAttachableItem* attachable_item = (*I);
+        if (attachable_item->item().object().ID() == inventory_item->object().ID())
+        {
+            m_attached_objects.erase(I);
+            attachable_item->afterDetach();
+            if (m_attached_objects.empty())
+            {
+                CGameObject* game_object = smart_cast<CGameObject*>(this);
+                VERIFY(game_object && game_object->Visual());
+                game_object->remove_visual_callback(AttachmentCallback);
+
+                inventory_item->object().setVisible(false);
+            }
+            break;
+        }
+    }
+}
+
+bool CAttachmentOwner::attached(const CInventoryItem* inventory_item) const { return (attachedItem(inventory_item->object().ID()) != NULL); }
+
+bool CAttachmentOwner::attached(shared_str sect_name) const { return (attachedItem(sect_name) != NULL); }
+
+bool CAttachmentOwner::can_attach(const CInventoryItem* inventory_item) const
+{
+    const CAttachableItem* item = smart_cast<const CAttachableItem*>(inventory_item);
+    if (!item || !item->enabled() || !item->can_be_attached())
+        return (false);
+
+    //можно ли присоединять объекты такого типа
+    if (m_attach_item_sections.end() == std::find(m_attach_item_sections.begin(), m_attach_item_sections.end(), inventory_item->object().cNameSect()))
+        return false;
+
+    //если уже есть присоединненый объет такого типа
+    if (attached(inventory_item->object().cNameSect()))
+        return false;
+
+    return true;
+}
+
+void CAttachmentOwner::reattach_items()
+{
+    CGameObject* game_object = smart_cast<CGameObject*>(this);
+    VERIFY(game_object && game_object->Visual());
+
+    xr_vector<CAttachableItem*>::const_iterator I = m_attached_objects.begin();
+    xr_vector<CAttachableItem*>::const_iterator E = m_attached_objects.end();
+    for (; I != E; ++I)
+    {
+        CAttachableItem* attachable_item = *I;
+        VERIFY(attachable_item);
+        attachable_item->set_bone_id(smart_cast<IKinematics*>(game_object->Visual())->LL_BoneID(attachable_item->bone_name()));
+    }
+}
+
+CAttachableItem* CAttachmentOwner::attachedItem(CLASS_ID clsid) const
+{
+    xr_vector<CAttachableItem*>::const_iterator I = m_attached_objects.begin();
+    xr_vector<CAttachableItem*>::const_iterator E = m_attached_objects.end();
+    for (; I != E; ++I)
+        if ((*I)->item().object().CLS_ID == clsid)
+            return (*I);
+
+    return NULL;
+}
+
+CAttachableItem* CAttachmentOwner::attachedItem(u16 id) const
+{
+    xr_vector<CAttachableItem*>::const_iterator I = m_attached_objects.begin();
+    xr_vector<CAttachableItem*>::const_iterator E = m_attached_objects.end();
+    for (; I != E; ++I)
+        if ((*I)->item().object().ID() == id)
+            return (*I);
+
+    return NULL;
+}
+
+CAttachableItem* CAttachmentOwner::attachedItem(const shared_str& section) const
+{
+    xr_vector<CAttachableItem*>::const_iterator I = m_attached_objects.begin();
+    xr_vector<CAttachableItem*>::const_iterator E = m_attached_objects.end();
+    for (; I != E; ++I)
+        if (!xr_strcmp((*I)->item().object().cNameSect(), section) && !(*I)->item().IsInvalid())
+            return (*I);
+
+    return NULL;
+}

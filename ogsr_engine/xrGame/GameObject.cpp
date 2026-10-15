@@ -1,0 +1,1267 @@
+#include "StdAfx.h"
+#include "../xrCore/load_prof.h"   // per-spawn breakdown
+#include "npc_perf.h"
+#include "GameObject.h"
+#include "PhysicsShell.h"
+#include "ai_space.h"
+#include "CustomMonster.h"
+#include "PhysicObject.h"
+#include "HangingLamp.h"
+#include "PhysicsShell.h"
+#include "game_sv_single.h"
+#include "level_graph.h"
+#include "ph_shell_interface.h"
+#include "script_game_object.h"
+#include "xrServer_Objects_ALife.h"
+#include "xrServer_Objects_ALife_Items.h"
+#include "InventoryOwner.h"
+#include "Inventory.h"
+#include "inventory_item.h"
+#include "WeaponMagazined.h"
+#include "game_cl_base.h"
+#include "object_factory.h"
+#include "../Include/xrRender/Kinematics.h"
+#include "game_graph.h"
+#include "ai_debug.h"
+#include "../xr_3da/IGame_Level.h"
+#include "Level.h"
+#include "../xr_3da/NET_Server_Trash/NET_utils.h"
+#include "script_callback_ex.h"
+#include "MathUtils.h"
+#include "game_level_cross_table.h"
+#include "animation_movement_controller.h"
+#include "game_object_space.h"
+#include "alife_simulator.h"
+#include "alife_object_registry.h"
+#include "Car.h"
+#include "ai_object_location.h"
+#include "PHCommander.h"
+#include "PHScriptCall.h"
+#include "debug_renderer.h"
+// GE_NPC_ACTIVE_ITEM carries what a server-driven creature is doing with its
+// weapon: sv_npc.h names the bits, object_handler.h owns the answer.
+#include "object_handler.h"
+#include "sv_npc.h"
+
+CGameObject::CGameObject()
+{
+    init();
+    //-----------------------------------------
+    m_spawn_time = 0;
+    m_ai_location = xr_new<CAI_ObjectLocation>();
+    m_server_flags.one();
+
+    auto dummy_callback = std::make_unique<GOCallbackInfo>();
+    this->m_callbacks[GameObject::eDummy] = std::move(dummy_callback);
+
+    m_anim_mov_ctrl = 0;
+}
+
+CGameObject::~CGameObject()
+{
+    VERIFY(!animation_movement());
+    VERIFY(!m_ini_file);
+    VERIFY(!m_lua_game_object);
+    VERIFY(!m_spawned);
+    xr_delete(m_ai_location);
+    m_callbacks.clear();
+
+    for (auto& ft : feel_touch_addons)
+    {
+        xr_delete(ft);
+    }
+    feel_touch_addons.clear();
+}
+
+CSE_ALifeDynamicObject* CGameObject::alife_object() const
+{
+    const CALifeSimulator* sim = ai().get_alife();
+    if (sim)
+        return sim->objects().object(ID(), true);
+    return NULL;
+}
+
+void CGameObject::init()
+{
+    m_lua_game_object = 0;
+    m_script_clsid = -1;
+    m_ini_file = 0;
+    m_spawned = false;
+}
+
+void CGameObject::Load(LPCSTR section)
+{
+    inherited::Load(section);
+    ISpatial* self = smart_cast<ISpatial*>(this);
+    if (self)
+    {
+        // #pragma todo("to Dima: All objects are visible for AI ???")
+        // self->spatial.type	|=	STYPE_VISIBLEFORAI;
+        self->spatial.type &= ~STYPE_REACTTOSOUND;
+    }
+}
+
+void CGameObject::reinit()
+{
+    m_visual_callback.clear();
+    ai_location().reinit();
+
+    // clear callbacks
+    for (auto& pair : m_callbacks)
+        pair.second->m_callback.clear();
+}
+
+void CGameObject::reload(LPCSTR section)
+{
+    m_script_clsid = object_factory().script_clsid(CLS_ID);
+}
+
+void CGameObject::net_Destroy()
+{
+    VERIFY(m_spawned);
+    if (!m_spawned)
+        Msg("!![%s] Already destroyed object detected: [%s]", __FUNCTION__, this->cName().c_str());
+
+    if (animation_movement_controlled())
+        destroy_anim_mov_ctrl();
+
+    xr_delete(m_ini_file);
+
+    m_script_clsid = -1;
+    if (Visual() && smart_cast<IKinematics*>(Visual()))
+        smart_cast<IKinematics*>(Visual())->Callback(0, 0);
+
+    inherited::net_Destroy();
+    setReady(FALSE);
+    g_pGameLevel->Objects.net_Unregister(this);
+
+    if (this == Level().CurrentEntity())
+    {
+        Level().SetEntity(0);
+        Level().SetControlEntity(0);
+    }
+
+    
+    // remove calls
+    CPHSriptReqGObjComparer cmpr(this);
+    Level().ph_commander_scripts().remove_calls(&cmpr);
+
+    CScriptBinder::net_Destroy();
+
+    xr_delete(m_lua_game_object);
+    m_spawned = false;
+}
+
+void CGameObject::OnEvent(NET_Packet& P, u16 type)
+{
+    switch (type)
+    {
+    case GE_HIT:{
+        SHit HDS;
+        HDS.PACKET_TYPE = type;
+        HDS.Read_Packet_Cont(P);
+        CObject* Hitter = Level().Objects.net_Find(HDS.whoID);
+        CObject* Weapon = Level().Objects.net_Find(HDS.weaponID);
+        HDS.who = Hitter;
+        //-------------------------------------------------------
+        SetHitInfo(Hitter, Weapon, HDS.bone(), HDS.p_in_bone_space, HDS.dir);
+        Hit(&HDS);
+    }
+    break;
+    case GE_NPC_ACTIVE_ITEM: {
+        // What a server-driven creature is holding. See SVNpc::PublishHands for
+        // why this event has to exist at all.
+        u16 item_id = 0xffff;
+        P.r_u16(item_id);
+        // posture rides along with the weapon -- see the enum in sv_npc.h for
+        // why it is polled with it rather than given a channel of its own
+        u16 posture = 0;
+        u16 action_state = u16(-1);
+        if (P.r_elapsed() >= 2)
+            P.r_u16(posture);
+        if (P.r_elapsed() >= 2)
+            P.r_u16(action_state);
+
+        // The host's own copy decided this; only the copies that cannot know
+        // need telling. Applying it here too would fight the AI that set it.
+        //
+        // ⚠⚠The test is "does this process have a server", NOT Local().
+        // cl_Process_Spawn force-sets M_SPAWN_OBJECT_LOCAL on EVERY object a
+        // network client spawns (Level_network_spawn.cpp:42, "force object to
+        // be local for server client"), so Local() is true for everything over
+        // there -- including other people's NPCs. Gating on it threw away every
+        // announcement this channel sent, silently, on the one machine that
+        // needed them. Cost a full build-and-play cycle to find.
+        if (Level().Server)
+            break;
+
+        // Posture first: it applies to the puppet whether or not the weapon
+        // announcement resolves, and an unarmed creature still crouches.
+        extern void net_puppet_note_posture(u16 id, u16 posture, u16 action_state);
+        net_puppet_note_posture(u16(ID()), posture, action_state);
+
+        // ⭐...and whether the weapon is on his back, applied to the object
+        // itself rather than recorded in the animation track. Everything that
+        // asks -- the bones the weapon hangs off, the offset it hangs at, the
+        // torso cycle -- reads it through CObjectHandler, and they must all get
+        // the same answer in the same frame. A debounce on this one would show
+        // a rifle floating between a hand and a shoulder blade.
+        if (CObjectHandler* OH = smart_cast<CObjectHandler*>(this))
+        {
+            const bool strapped = (0 != (posture & npc_posture_strapped));
+            // Drawing or holstering right now: the same four states the host
+            // excludes, arriving in the action field this packet already had.
+            const u16 act = u16((posture >> npc_posture_action_shift) & npc_posture_action_mask);
+            const bool moving = (act == npc_action_strap) || (act == npc_action_unstrap);
+            // ⭐Logged at the RECEIVING end and only on change. The sending end
+            // proves nothing about a channel: the last two holes of this shape
+            // were both a server that sent faithfully into a client that threw
+            // the message away. On change, because the announcement repeats
+            // every five seconds and a per-message line would bury the log.
+            // ⭐Where the motion ENDS, not where the weapon is right now. A
+            // holster is an announcement that the rifle is going on the back;
+            // the copy can act on that as soon as its own animation is done
+            // instead of waiting for a host whose transition timer is twice as
+            // long -- which is what made the weapon teleport a second after the
+            // hands had already come forward.
+            const bool to_back = (act == npc_action_strap);
+            // ⚠Reported on a change of DESTINATION, not of strapped_state():
+            // that one is false throughout every transition, so gating on it
+            // printed "in hands (holstering)" in the same millisecond the bones
+            // log said STRAP BONES. Two receiving-end reports about one fact,
+            // contradicting each other.
+            const bool dest = moving ? to_back : strapped;
+            if (dest != OH->net_destination())
+                Msg("~ [strap] client: %u '%s' -> weapon %s%s", ID(), cName().c_str(), dest ? "ON THE BACK" : "in hands",
+                    moving ? (to_back ? " (holstering)" : " (drawing)") : "");
+            OH->set_net_strapped(strapped, moving, to_back);
+        }
+
+        CInventoryOwner* IO = smart_cast<CInventoryOwner*>(this);
+        if (!IO)
+            break;
+
+        if (0xffff == item_id)
+        {
+            IO->inventory().SetActiveSlot(NO_ACTIVE_SLOT);
+            break;
+        }
+
+        CInventoryItem* item = smart_cast<CInventoryItem*>(Level().Objects.net_Find(item_id));
+        // ⚠A miss is normal, not an error: the announcement can outrun the
+        // item's own spawn packet. The server re-announces on a timer, so this
+        // heals itself rather than needing a queue here.
+        if (!item || IO->inventory().ActiveItem() == item)
+            break;
+
+        // ⭐⭐Placed, then made active DIRECTLY -- not through Activate().
+        //
+        // Activate() only queues the switch (m_iNextActiveSlot) and lets
+        // CInventory::Update drive it through the show/hide animation state
+        // machine. On a copy nobody simulates that machine has no reason to
+        // ever finish, and the engine already knows it: CInventoryOwner::load
+        // restores a saved owner's weapon with SetActiveSlot + a deferred
+        // activate, for exactly the same reason. This is that path.
+        //
+        // ⚠And the ONLY thing that draws a creature's weapon is
+        // CInventoryOwner::renderable_Render, which renders inventory()
+        // .ActiveItem() and nothing else. No active slot, no weapon -- however
+        // correctly it sits in the inventory.
+        const bool put = IO->inventory().Slot(item, true);
+        IO->inventory().SetActiveSlot(item->GetSlot());
+
+        Msg("~ [hands] client: %u '%s' told to hold %u '%s' -- slot %u, put=%d, active=%u, parent=%u", ID(), cName().c_str(), item_id, item->object().cName().c_str(),
+            u32(item->GetSlot()), put ? 1 : 0, IO->inventory().ActiveItem() ? IO->inventory().ActiveItem()->object().ID() : 0xffff,
+            item->object().H_Parent() ? item->object().H_Parent()->ID() : 0xffff);
+    }
+    break;
+    case GE_REVIVE: {
+        float health_fraction = 1.f;
+        P.r_float(health_fraction);
+
+        // ⚠Deliberately NOT gated on Level().Server, unlike the two
+        // announcements above -- and measured 05-08-2026: the host's in-process
+        // client DOES receive this broadcast, right after SVRevive revived the
+        // host's copy directly. The double application is refused one level
+        // down, by CEntityAlive::OnServerRevive's own "already alive" check,
+        // which is the right place for it: that guard also protects a genuine
+        // duplicate arriving at a remote client.
+        Msg("~ [revive] client: %u '%s' revived at %.2f health", ID(), cName().c_str(), health_fraction);
+        OnServerRevive(health_fraction);
+    }
+    break;
+    case GE_NPC_VISUAL: {
+        // The server re-dressed this creature. See SVNpc::SetVisual, and
+        // sv_visual_armour.h for why a change of model is a change of armour.
+        shared_str visual;
+        P.r_stringZ(visual);
+
+        // ⚠Level().Server, never Local() -- the same trap GE_NPC_ACTIVE_ITEM
+        // documents above. The host already changed its own entity before it
+        // sent this, and applying it twice there would rebuild a skeleton the
+        // host's AI is standing on for no reason.
+        if (Level().Server)
+            break;
+
+        // ⭐Said out loud on the RECEIVING end. This is one line per operator
+        // action, and it is the only thing that separates "the client never got
+        // it" from "the client got it and still draws the old body" -- two
+        // different bugs that look identical from inside the world.
+        Msg("~ [visual] client: %u '%s' re-dressed as '%s'", ID(), cName().c_str(), visual.c_str());
+        OnServerVisualChange(visual);
+    }
+    break;
+    case GE_NPC_SHOT: {
+        // A server-driven creature fired. See SVNpc::PublishShot.
+        u16 weapon_id = 0xffff;
+        Fvector fire_pos, fire_dir;
+        P.r_u16(weapon_id);
+        P.r_vec3(fire_pos);
+        P.r_dir(fire_dir);
+
+        // ⚠Level().Server, never Local() -- see GE_NPC_ACTIVE_ITEM above for
+        // the full story. The host's own weapon already did all of this when
+        // it actually fired.
+        if (Level().Server)
+            break;
+
+        // The aiming pose is latched here rather than replicated separately: a
+        // creature that is shooting is, by definition, aiming, and that is one
+        // channel instead of two. Done before the weapon lookup so a shooter
+        // whose weapon has not spawned yet still raises its rifle.
+        extern void net_puppet_note_shot(u16 id);
+        net_puppet_note_shot(u16(ID()));
+
+        CInventoryOwner* IO = smart_cast<CInventoryOwner*>(this);
+        if (!IO)
+            break;
+
+        // The weapon by id, falling back to whatever is in hands: the
+        // announcement can outrun the item's spawn, and being one frame late
+        // with a muzzle flash is better than dropping it.
+        CWeaponMagazined* W = smart_cast<CWeaponMagazined*>(Level().Objects.net_Find(weapon_id));
+        if (!W)
+            W = smart_cast<CWeaponMagazined*>(IO->inventory().ActiveItem());
+        if (!W || W->H_Parent() != this)
+            break;
+
+        W->OnNetworkShot(fire_pos, fire_dir);
+
+        // Same shape as the server's counter, so the two logs can be compared
+        // as RATES rather than as "somebody fired at some point" -- a shot that
+        // crosses the wire and a firefight that reaches the screen are
+        // different claims and the old modulus could only support the first.
+        static u32 s_shots = 0;
+        static u32 s_next_report = 0;
+        ++s_shots;
+        if (s_shots == 1)
+            Msg("~ [shot] client: %u '%s' fired %s -- first shot drawn", ID(), cName().c_str(), W->cNameSect().c_str());
+        if (Device.dwTimeGlobal >= s_next_report)
+        {
+            s_next_report = Device.dwTimeGlobal + 5000;
+            Msg("~ [shot] client: %u drawn so far", s_shots);
+        }
+    }
+    break;
+    case GE_DESTROY: {
+        if (H_Parent())
+        {
+            Msg("GE_DESTROY arrived, but H_Parent() exist. object[%d][%s] parent[%d][%s] [%d]", ID(), cName().c_str(), H_Parent()->ID(), H_Parent()->cName().c_str(),
+                Device.dwFrame);
+        }
+        if (!Level().is_removing_objects())
+        {
+            ASSERT_FMT(ID() != 0, "![%s] cannot destory actor!", __FUNCTION__);
+        }
+        setDestroy(TRUE);
+    }
+    break;
+    }
+}
+
+void VisualCallback(IKinematics* tpKinematics);
+
+// Spawn-burst profiling (Level_network_spawn.cpp): the model load hides in here,
+// and it is the one part of a spawn that touches the disk.
+namespace SpawnProf
+{
+extern u64 s_visual;
+extern u32 s_visuals;
+extern u64 s_upgrades, s_reload, s_reinit, s_inherited, s_binder, s_binderReload;
+struct scope
+{
+    u64& sink;
+    u64  t0;
+    scope(u64& s) : sink(s), t0(CPU::QPC()) {}
+    ~scope() { sink += CPU::QPC() - t0; }
+};
+}   // namespace SpawnProf
+
+BOOL CGameObject::net_Spawn(CSE_Abstract* DC)
+{
+    LoadProf::Scope _lpNetSpawn("gameobject.net_Spawn");
+    VERIFY(!m_spawned);
+    if (m_spawned)
+        Msg("!![%s] Already spawned object detected: [%s]", __FUNCTION__, this->cName().c_str());
+
+    m_spawned = true;
+    m_spawn_time = Device.dwFrame;
+    CSE_Abstract* E = (CSE_Abstract*)DC;
+    VERIFY(E);
+
+    // Naming
+    cName_set(E->s_name);
+    cNameSect_set(E->s_name);
+    if (E->name_replace()[0])
+        cName_set(E->name_replace());
+
+    setID(E->ID);
+    //	R_ASSERT(Level().Objects.net_Find(E->ID) == NULL);
+
+    const CSE_Visual* visual = smart_cast<const CSE_Visual*>(E);
+    if (visual)
+    {
+        LPCSTR saved_visual = visual_name(E);
+
+        if (pSettings->line_exist(cNameSect(), "visual"))
+        {
+            shared_str config_visual = pSettings->r_string(cNameSect(), "visual");
+
+            string_path config_visual_file;
+            if (0 == strext(*config_visual))
+                strconcat(sizeof(config_visual_file), config_visual_file, *config_visual, ".ogf");
+            else
+                strcpy_s(config_visual_file, sizeof(config_visual_file), *config_visual);
+            xr_strlwr(config_visual_file);
+
+            string_path saved_visual_file;
+            if (0 == strext(saved_visual))
+                strconcat(sizeof(saved_visual_file), saved_visual_file, saved_visual, ".ogf");
+            else
+                strcpy_s(saved_visual_file, sizeof(saved_visual_file), saved_visual);
+            xr_strlwr(saved_visual_file);
+
+            bool keep_visual = READ_IF_EXISTS(pSettings, r_bool, cNameSect().c_str(), "keep_visual", false);
+            if (keep_visual)
+            {
+                if (xr_strcmp(config_visual_file, saved_visual_file))
+                {
+                    Msg("! [%s]: changed visual_name[%s] found in %s, keep original %s instead", __FUNCTION__, saved_visual, cName().c_str(), config_visual.c_str());
+                }
+            }
+            else if (!FS.exist(saved_visual) && !FS.exist("$level$", saved_visual_file) && !FS.exist("$game_meshes$", saved_visual_file))
+            {
+                Msg("! [%s]: visual_name[%s] not found in %s, keep original %s instead", __FUNCTION__, saved_visual, cName().c_str(), config_visual.c_str());
+            }
+            else
+            {
+                SpawnProf::scope _p(SpawnProf::s_visual);
+                LoadProf::Scope _lp("visual");
+                ++SpawnProf::s_visuals;
+                cNameVisual_set(saved_visual);
+            }
+        }
+        else
+        {
+            SpawnProf::scope _p(SpawnProf::s_visual);
+            LoadProf::Scope _lp("visual");
+            ++SpawnProf::s_visuals;
+            cNameVisual_set(saved_visual);
+        }
+
+        if (visual->flags.test(CSE_Visual::flObstacle))
+        {
+            ISpatial* self = smart_cast<ISpatial*>(this);
+            self->spatial.type |= STYPE_OBSTACLE;
+        }
+    }
+
+    // XForm
+    XFORM().setXYZ(E->o_Angle);
+    Position().set(E->o_Position);
+    VERIFY(_valid(renderable.xform));
+    VERIFY(!fis_zero(DET(renderable.xform)));
+    CSE_ALifeObject* O = smart_cast<CSE_ALifeObject*>(E);
+    if (O && xr_strlen(O->m_ini_string))
+    {
+        IReader r((void*)O->m_ini_string.c_str(), O->m_ini_string.size());
+        m_ini_file = xr_new<CInifile>(&r, FS.get_path("$game_config$")->m_Path);
+    }
+
+    m_story_id = ALife::_STORY_ID(-1);
+    if (O)
+        m_story_id = O->m_story_id;
+
+    // Net params
+    setLocal(E->s_flags.is(M_SPAWN_OBJECT_LOCAL));
+
+    setReady(TRUE);
+    g_pGameLevel->Objects.net_Register(this);
+
+    m_server_flags.one();
+    if (O)
+    {
+        m_server_flags = O->m_flags;
+        if (O->m_flags.is(CSE_ALifeObject::flVisibleForAI))
+            spatial.type |= STYPE_VISIBLEFORAI;
+        else
+            spatial.type = (spatial.type | STYPE_VISIBLEFORAI) ^ STYPE_VISIBLEFORAI;
+    }
+    if (pSettings->line_exist(cNameSect(), "use_ai_locations"))
+        SetUseAI_Locations(!!pSettings->r_bool(cNameSect(), "use_ai_locations"));
+
+    { SpawnProf::scope _p(SpawnProf::s_upgrades); LoadProf::Scope _lp("upgrades"); load_upgrades(DC); }
+
+    { SpawnProf::scope _p(SpawnProf::s_reload);       LoadProf::Scope _lp("reload");        reload(*cNameSect()); }
+    { SpawnProf::scope _p(SpawnProf::s_binderReload); LoadProf::Scope _lp("script.reload"); CScriptBinder::reload(*cNameSect()); }
+
+    {
+        SpawnProf::scope _p(SpawnProf::s_reinit);
+        LoadProf::Scope _lp("reinit");
+        reinit();
+        CScriptBinder::reinit();
+    }
+    // load custom user data from server
+    if (!E->client_data.empty())
+    {
+        //		Msg				("client data is present for object [%d][%s], load is processed",ID(),*cName());
+        IReader ireader = IReader(&*E->client_data.begin(), E->client_data.size());
+        net_Load(ireader); // вызов load(IReader& input_packet)
+    }
+    else
+    {
+        //		Msg				("no client data for object [%d][%s], load is skipped",ID(),*cName());
+    }
+
+    // if we have a parent
+    if (0xffff != E->ID_Parent)
+    {
+        if (!Parent)
+        {
+            // // we need this to prevent illegal ref_dec/ref_add
+            // this is obsolete, since ref_dec/ref_add are removed
+            // but I propose do not touch this, or touch and then
+            // test the whole spawn sequence
+            Parent = this;
+            { SpawnProf::scope _p(SpawnProf::s_inherited); inherited::net_Spawn(DC); }
+            Parent = 0;
+        }
+        else
+        {
+            SpawnProf::scope _p(SpawnProf::s_inherited);
+            inherited::net_Spawn(DC);
+        }
+    }
+    else
+    {
+        if (ai().get_level_graph())
+        {
+            CSE_ALifeObject* l_tpALifeObject = smart_cast<CSE_ALifeObject*>(E);
+            CSE_Temporary* l_tpTemporary = smart_cast<CSE_Temporary*>(E);
+            if (l_tpALifeObject && ai().level_graph().valid_vertex_id(l_tpALifeObject->m_tNodeID))
+                ai_location().level_vertex(l_tpALifeObject->m_tNodeID);
+            else if (l_tpTemporary && ai().level_graph().valid_vertex_id(l_tpTemporary->m_tNodeID))
+                ai_location().level_vertex(l_tpTemporary->m_tNodeID);
+
+            if (l_tpALifeObject && ai().game_graph().valid_vertex_id(l_tpALifeObject->m_tGraphID))
+                ai_location().game_vertex(l_tpALifeObject->m_tGraphID);
+
+            if (!_valid(Position()))
+            {
+                Fvector vertex_pos = ai().level_graph().vertex_position(ai_location().level_vertex_id());
+                Msg("! [%s]: %s has invalid Position[%f,%f,%f] level_vertex_id[%u][%f,%f,%f]", __FUNCTION__, cName().c_str(), Position().x, Position().y, Position().z,
+                    ai_location().level_vertex_id(), vertex_pos.x, vertex_pos.y, vertex_pos.z);
+                Position().set(vertex_pos);
+                auto se_obj = alife_object();
+                if (se_obj)
+                    se_obj->o_Position.set(Position());
+            }
+
+            validate_ai_locations(false);
+
+            // validating position
+            if (UsedAI_Locations() && ai().level_graph().inside(ai_location().level_vertex_id(), Position()) && can_validate_position_on_spawn())
+                Position().y = EPS_L + ai().level_graph().vertex_plane_y(*ai_location().level_vertex(), Position().x, Position().z);
+        }
+
+        { SpawnProf::scope _p(SpawnProf::s_inherited); inherited::net_Spawn(DC); }
+    }
+
+    m_bObjectRemoved = false;
+
+    {
+        LoadProf::Scope _lp("supplies");
+        spawn_supplies();
+    }
+    { SpawnProf::scope _p(SpawnProf::s_binder); LoadProf::Scope _lp("script.net_spawn"); return CScriptBinder::net_Spawn(DC); }
+}
+
+void CGameObject::net_Save(NET_Packet& net_packet)
+{
+    u32 position;
+    net_packet.w_chunk_open16(position);
+    save(net_packet);
+
+    // Script Binder Save ---------------------------------------
+
+    CScriptBinder::save(net_packet);
+
+    // ----------------------------------------------------------
+
+    net_packet.w_chunk_close16(position);
+}
+
+void CGameObject::net_Load(IReader& ireader)
+{
+    load(ireader);
+
+    // Script Binder Load ---------------------------------------
+
+    CScriptBinder::load(ireader);
+
+    // ----------------------------------------------------------
+}
+
+void CGameObject::save(NET_Packet& output_packet) {}
+
+void CGameObject::load(IReader& input_packet) {}
+
+void CGameObject::spawn_supplies()
+{
+    if (!spawn_ini() || ai().get_alife())
+        return;
+
+    if (!spawn_ini()->section_exist("spawn"))
+        return;
+
+    LPCSTR N, V;
+    float p;
+    bool bScope = false;
+    bool bSilencer = false;
+    bool bLauncher = false;
+
+    for (u32 k = 0, j; spawn_ini()->r_line("spawn", k, &N, &V); k++)
+    {
+        VERIFY(xr_strlen(N));
+        j = 1;
+        p = 1.f;
+
+        float f_cond = 1.0f;
+        if (V && xr_strlen(V))
+        {
+            int n = _GetItemCount(V);
+            string16 temp;
+            if (n > 0)
+                j = atoi(_GetItem(V, 0, temp)); // count
+
+            if (NULL != strstr(V, "prob="))
+                p = (float)atof(strstr(V, "prob=") + 5);
+            if (fis_zero(p))
+                p = 1.f;
+            if (!j)
+                j = 1;
+            if (NULL != strstr(V, "cond="))
+                f_cond = (float)atof(strstr(V, "cond=") + 5);
+            bScope = (NULL != strstr(V, "scope"));
+            bSilencer = (NULL != strstr(V, "silencer"));
+            bLauncher = (NULL != strstr(V, "launcher"));
+        }
+        for (u32 i = 0; i < j; ++i)
+            if (::Random.randF(1.f) < p)
+            {
+                CSE_Abstract* A = Level().spawn_item(N, Position(), ai_location().level_vertex_id(), ID(), true);
+
+                CSE_ALifeInventoryItem* pSE_InventoryItem = smart_cast<CSE_ALifeInventoryItem*>(A);
+                if (pSE_InventoryItem)
+                    pSE_InventoryItem->m_fCondition = f_cond;
+
+                CSE_ALifeItemWeapon* W = smart_cast<CSE_ALifeItemWeapon*>(A);
+                if (W)
+                {
+                    if (W->m_scope_status == CSE_ALifeItemWeapon::eAddonAttachable)
+                        W->m_addon_flags.set(CSE_ALifeItemWeapon::eWeaponAddonScope, bScope);
+                    if (W->m_silencer_status == CSE_ALifeItemWeapon::eAddonAttachable)
+                        W->m_addon_flags.set(CSE_ALifeItemWeapon::eWeaponAddonSilencer, bSilencer);
+                    if (W->m_grenade_launcher_status == CSE_ALifeItemWeapon::eAddonAttachable)
+                        W->m_addon_flags.set(CSE_ALifeItemWeapon::eWeaponAddonGrenadeLauncher, bLauncher);
+                }
+
+                NET_Packet P;
+                A->Spawn_Write(P, TRUE);
+                Level().Send(P, net_flags(TRUE));
+                F_entity_Destroy(A);
+            }
+    }
+}
+
+void CGameObject::setup_parent_ai_locations(bool assign_position)
+{
+    //	CGameObject				*l_tpGameObject	= static_cast<CGameObject*>(H_Root());
+    VERIFY(H_Parent());
+    CGameObject* l_tpGameObject = static_cast<CGameObject*>(H_Parent());
+    VERIFY(l_tpGameObject);
+
+    // get parent's position
+    if (assign_position && use_parent_ai_locations())
+        Position().set(l_tpGameObject->Position());
+
+    // setup its ai locations
+    if (!UsedAI_Locations())
+        return;
+
+    if (!ai().get_level_graph())
+        return;
+
+    if (l_tpGameObject->UsedAI_Locations() && ai().level_graph().valid_vertex_id(l_tpGameObject->ai_location().level_vertex_id()))
+        ai_location().level_vertex(l_tpGameObject->ai_location().level_vertex_id());
+    else
+        validate_ai_locations(false);
+    //	VERIFY2						(l_tpGameObject->UsedAI_Locations(),*l_tpGameObject->cNameSect());
+    //	VERIFY2						(ai().level_graph().valid_vertex_id(l_tpGameObject->ai_location().level_vertex_id()),*cNameSect());
+    //	ai_location().level_vertex	(l_tpGameObject->ai_location().level_vertex_id());
+
+    if (ai().game_graph().valid_vertex_id(l_tpGameObject->ai_location().game_vertex_id()))
+        ai_location().game_vertex(l_tpGameObject->ai_location().game_vertex_id());
+    else
+        ai_location().game_vertex(ai().cross_table().vertex(ai_location().level_vertex_id()).game_vertex_id());
+    //	VERIFY2						(ai().game_graph().valid_vertex_id(l_tpGameObject->ai_location().game_vertex_id()),*cNameSect());
+    //	ai_location().game_vertex	(l_tpGameObject->ai_location().game_vertex_id());
+}
+
+void CGameObject::validate_ai_locations(bool decrement_reference)
+{
+    if (!ai().get_level_graph())
+        return;
+
+    if (!UsedAI_Locations())
+    {
+        //		if (ai().get_game_graph() && ai().get_cross_table())
+        //			set_game_vertex		(ai().cross_table().vertex(level_vertex_id()).game_vertex_id());
+        return;
+    }
+
+    //	CTimer							timer;
+    //	timer.Start						();
+    Fvector center;
+    Center(center);
+    center.x = Position().x;
+    center.z = Position().z;
+    u32 l_dwNewLevelVertexID = ai().level_graph().vertex_id(ai_location().level_vertex_id(), center);
+
+    VERIFY(ai().level_graph().valid_vertex_id(l_dwNewLevelVertexID));
+
+    if (decrement_reference && (ai_location().level_vertex_id() == l_dwNewLevelVertexID))
+        return;
+
+    ai_location().level_vertex(l_dwNewLevelVertexID);
+
+    if (ai().get_game_graph() && ai().get_cross_table())
+    {
+        ai_location().game_vertex(ai().cross_table().vertex(ai_location().level_vertex_id()).game_vertex_id());
+        VERIFY(ai().game_graph().valid_vertex_id(ai_location().game_vertex_id()));
+    }
+}
+
+void CGameObject::spatial_move()
+{
+    if (H_Parent())
+        setup_parent_ai_locations(true);
+    else if (Visual())
+        validate_ai_locations(true);
+
+    inherited::spatial_move();
+}
+
+void CGameObject::dbg_DrawSkeleton()
+{
+    CCF_Skeleton* Skeleton = smart_cast<CCF_Skeleton*>(collidable.model);
+    if (!Skeleton)
+        return;
+
+    Skeleton->_dbg_refresh();
+
+    for (const auto& Element : Skeleton->_GetElements())
+    {
+        if (!Element.valid())
+            continue;
+
+        switch (Element.type)
+        {
+        case SBoneShape::stBox: {
+            Fmatrix M;
+            M.invert(Element.b_IM);
+            Fvector h_size = Element.b_hsize;
+            Level().debug_renderer().draw_obb(M, h_size, color_rgba(0, 255, 0, 255));
+        }
+        break;
+        case SBoneShape::stCylinder: {
+            Fmatrix M;
+            M.c.set(Element.c_cylinder.m_center);
+            M.k.set(Element.c_cylinder.m_direction);
+            Fvector h_size;
+            h_size.set(Element.c_cylinder.m_radius, Element.c_cylinder.m_radius, Element.c_cylinder.m_height * 0.5f);
+            Fvector::generate_orthonormal_basis(M.k, M.j, M.i);
+            Level().debug_renderer().draw_obb(M, h_size, color_rgba(255, 127, 0, 255));
+        }
+        break;
+        case SBoneShape::stSphere: {
+            Fmatrix l_ball;
+            l_ball.scale(Element.s_sphere.R, Element.s_sphere.R, Element.s_sphere.R);
+            l_ball.translate_add(Element.s_sphere.P);
+            Level().debug_renderer().draw_ellipse(l_ball, color_rgba(0, 255, 0, 255));
+        }
+        break;
+        };
+    };
+}
+
+void CGameObject::renderable_Render(u32 context_id, IRenderable* root)
+{
+    inherited::renderable_Render(context_id, root);
+    ::Render->add_Visual(context_id, root, Visual(), XFORM());
+    Visual()->getVisData().hom_frame = Device.dwFrame;
+}
+
+
+CObject::SavedPosition CGameObject::ps_Element(u32 ID) const
+{
+    VERIFY(ID < ps_Size());
+    inherited::SavedPosition SP = PositionStack[ID];
+    return SP;
+}
+
+void CGameObject::u_EventGen(NET_Packet& P, u32 type, u32 dest)
+{
+    P.w_begin(M_EVENT);
+    P.w_u32(Level().timeServer());
+    P.w_u16(u16(type & 0xffff));
+    P.w_u16(u16(dest & 0xffff));
+}
+
+void CGameObject::u_EventSend(NET_Packet& P, u32 dwFlags) { Level().Send(P, dwFlags); }
+
+#include "Bolt.h"
+void CGameObject::OnH_B_Chield()
+{
+    inherited::OnH_B_Chield();
+    /// PHSetPushOut();????
+}
+
+void CGameObject::OnH_B_Independent(bool just_before_destroy)
+{
+    inherited::OnH_B_Independent(just_before_destroy);
+
+    setup_parent_ai_locations(false);
+
+    CGameObject* parent = smart_cast<CGameObject*>(H_Parent());
+    VERIFY(parent);
+    if (ai().get_level_graph() && ai().level_graph().valid_vertex_id(parent->ai_location().level_vertex_id()))
+        validate_ai_locations(false);
+}
+
+BOOL CGameObject::UsedAI_Locations() { return (m_server_flags.test(CSE_ALifeObject::flUsedAI_Locations)); }
+
+void CGameObject::SetUseAI_Locations(bool _use) { m_server_flags.set(CSE_ALifeObject::flUsedAI_Locations, _use); }
+
+BOOL CGameObject::TestServerFlag(u32 Flag) const { return (m_server_flags.test(Flag)); }
+
+void CGameObject::add_visual_callback(visual_callback* callback)
+{
+    VERIFY(smart_cast<IKinematics*>(Visual()));
+    VERIFY(std::find(visual_callbacks().begin(), visual_callbacks().end(), callback) == visual_callbacks().end());
+
+    if (m_visual_callback.empty())
+        SetKinematicsCallback(true);
+    m_visual_callback.push_back(callback);
+}
+
+void CGameObject::remove_visual_callback(visual_callback* callback)
+{
+    CALLBACK_VECTOR_IT I = std::find(m_visual_callback.begin(), m_visual_callback.end(), callback);
+    VERIFY(I != m_visual_callback.end());
+    m_visual_callback.erase(I);
+    if (m_visual_callback.empty())
+        SetKinematicsCallback(false);
+}
+
+void CGameObject::SetKinematicsCallback(bool set)
+{
+    if (!Visual())
+        return;
+    if (set)
+        smart_cast<IKinematics*>(Visual())->Callback(VisualCallback, this);
+    else
+        smart_cast<IKinematics*>(Visual())->Callback(0, 0);
+};
+
+void VisualCallback(IKinematics* tpKinematics)
+{
+    CGameObject* game_object = static_cast<CGameObject*>(static_cast<CObject*>(tpKinematics->GetUpdateCallbackParam()));
+    VERIFY(game_object);
+
+    CGameObject::CALLBACK_VECTOR_IT I = game_object->visual_callbacks().begin();
+    CGameObject::CALLBACK_VECTOR_IT E = game_object->visual_callbacks().end();
+    for (; I != E; ++I)
+        (*I)(tpKinematics);
+}
+
+CScriptGameObject* CGameObject::lua_game_object() const
+{
+    if (!m_spawned)
+    {
+        Msg("!! [%s] you are trying to use a destroyed object name=[%s] getDestroy=%d", __FUNCTION__, cName().c_str(), getDestroy());
+        LogStackTrace("!!stack trace:\n", false);
+    }
+
+    THROW(m_spawned);
+    if (!m_lua_game_object)
+        m_lua_game_object = xr_new<CScriptGameObject>(const_cast<CGameObject*>(this));
+    return (m_lua_game_object);
+}
+
+void CGameObject::DestroyObject()
+{
+    if (m_bObjectRemoved)
+        return;
+    m_bObjectRemoved = true;
+    if (getDestroy())
+        return;
+
+    NET_Packet P;
+    u_EventGen(P, GE_DESTROY, ID());
+    u_EventSend(P);
+}
+
+void CGameObject::shedule_Update(u32 dt)
+{
+    ZoneScoped;
+
+    NpcPerf::Scope _z_skel(NpcPerf::G_SKELETON);
+    CCF_Skeleton* skeleton = smart_cast<CCF_Skeleton*>(CFORM());
+    if (skeleton && skeleton->NeedInitialCalculate())
+    {
+        if (IKinematics* K = PKinematics(Visual()))
+        {
+            K->CalculateBones_Invalidate();
+            K->CalculateBones(TRUE);
+        }
+
+        skeleton->Calculate();
+    }
+
+    // Msg("-SUB-:[%x][%s] CGameObject::shedule_Update",smart_cast<void*>(this),cName().c_str());
+
+    _z_skel.stop();
+
+    inherited::shedule_Update(dt);
+    { NPC_ZONE(G_FEELADDONS); FeelTouchAddonsUpdate(); }
+
+    // ⭐Биндер RT-объекта (актёра) обновляется по периоду, а не каждый кадр:
+    // обоснование и замер -- у CScriptBinder::binder_rt_gate(). У объектов
+    // обычной очереди планировщик уже держит интервал, поэтому гейт им не нужен.
+    {
+        NPC_ZONE(G_BINDER);
+        const u64 _bt0 = NpcPerf::enabled ? CPU::QPC() : 0;
+        if (!shedule.b_RT)
+            CScriptBinder::shedule_Update(dt);
+        else if (u32 binder_dt = dt; CScriptBinder::binder_rt_gate(binder_dt))
+            CScriptBinder::shedule_Update(binder_dt);
+        if (NpcPerf::enabled)
+            NpcPerf::add_binder(typeid(*this).name(), 1000.0 * double(CPU::QPC() - _bt0) / double(CPU::QPCFreq()));
+    }
+}
+
+BOOL CGameObject::net_SaveRelevant() { return (CScriptBinder::net_SaveRelevant()); }
+
+u32 CGameObject::ef_creature_type() const
+{
+    string16 temp;
+    CLSID2TEXT(CLS_ID, temp);
+    R_ASSERT3(false, "Invalid creature type request, virtual function is not properly overridden!", temp);
+    return (u32(-1));
+}
+
+u32 CGameObject::ef_equipment_type() const
+{
+    string16 temp;
+    CLSID2TEXT(CLS_ID, temp);
+    R_ASSERT3(false, "Invalid equipment type request, virtual function is not properly overridden!", temp);
+    return (u32(-1));
+    //	return		(6);
+}
+
+u32 CGameObject::ef_main_weapon_type() const
+{
+    string16 temp;
+    CLSID2TEXT(CLS_ID, temp);
+    R_ASSERT3(false, "Invalid main weapon type request, virtual function is not properly overridden!", temp);
+    return (u32(-1));
+    //	return		(5);
+}
+
+u32 CGameObject::ef_anomaly_type() const
+{
+    string16 temp;
+    CLSID2TEXT(CLS_ID, temp);
+    R_ASSERT3(false, "Invalid anomaly type request, virtual function is not properly overridden!", temp);
+    return (u32(-1));
+}
+
+u32 CGameObject::ef_weapon_type() const
+{
+    string16 temp;
+    CLSID2TEXT(CLS_ID, temp);
+    R_ASSERT3(false, "Invalid weapon type request, virtual function is not properly overridden!", temp);
+    Msg("!![%s] Invalid weapon type request, virtual function is not properly overridden [%s] ", __FUNCTION__, temp);
+    return u32(-1);
+}
+
+u32 CGameObject::ef_detector_type() const
+{
+    string16 temp;
+    CLSID2TEXT(CLS_ID, temp);
+    R_ASSERT3(false, "Invalid detector type request, virtual function is not properly overridden!", temp);
+    return (u32(-1));
+}
+
+void CGameObject::net_Relcase(CObject* O)
+{
+    inherited::net_Relcase(O);
+    FeelTouchAddonsRelcase(O);
+    CScriptBinder::net_Relcase(O);
+}
+
+CScriptCallbackEx<void>& CGameObject::callback(GameObject::ECallbackType type) const
+{
+    if (auto it = m_callbacks.find(type); it != m_callbacks.end())
+        return (*it).second->m_callback;
+    else // KRodin: вот по-нормальному, надо возвращать nullptr и проверять в вызывающей функции, есть ли каллбек вообще. Но это кучу функций переделать надо, поэтому буду
+         // возвращать фейковый каллбек.
+        return m_callbacks.at(GameObject::eDummy)->m_callback;
+}
+
+LPCSTR CGameObject::visual_name(CSE_Abstract* server_entity)
+{
+    const CSE_Visual* visual = smart_cast<const CSE_Visual*>(server_entity);
+    VERIFY(visual);
+    return (visual->get_visual());
+}
+
+void CGameObject::update_animation_movement_controller()
+{
+    if (!animation_movement_controlled())
+        return;
+
+    m_anim_mov_ctrl->OnFrame();
+
+    if (m_anim_mov_ctrl->isActive())
+        return;
+
+    destroy_anim_mov_ctrl();
+}
+
+void CGameObject::UpdateCL() { inherited::UpdateCL(); }
+
+void CGameObject::OnChangeVisual()
+{
+    inherited::OnChangeVisual();
+    if (animation_movement_controlled())
+    {
+        destroy_anim_mov_ctrl();
+    }
+}
+void CGameObject::OnServerVisualChange(shared_str visual)
+{
+    if (!visual.size() || cNameVisual() == visual)
+        return;
+
+    // ⚠The model has to EXIST on this machine. A client whose install is
+    // missing it would otherwise lose the object entirely -- cNameVisual_set
+    // leaves renderable.visual null and everything downstream reads that as
+    // "destroyed" -- and one missing file would delete an NPC from one player's
+    // world while everyone else keeps fighting it.
+    string_path fname;
+    strconcat(sizeof(fname), fname, visual.c_str(), ".ogf");
+    if (!FS.exist("$game_meshes$", fname) && !FS.exist("$level$", fname))
+    {
+        Msg("! [visual] %s (id %u): server asked for model '%s', which this install does not have -- keeping the old one", cName().c_str(), ID(), visual.c_str());
+        return;
+    }
+
+    cNameVisual_set(visual);
+}
+
+bool CGameObject::shedule_Needed()
+{
+    return (!getDestroy());
+    //	return						(processing_enabled() || CScriptBinder::object());
+};
+
+void CGameObject::create_anim_mov_ctrl(CBlend* b)
+{
+    // if(m_anim_mov_ctrl)
+    // destroy_anim_mov_ctrl( );
+    VERIFY(!animation_movement());
+    VERIFY(Visual());
+    IKinematics* K = Visual()->dcast_PKinematics();
+    VERIFY(K);
+    m_anim_mov_ctrl = xr_new<animation_movement_controller>(&XFORM(), K, b);
+}
+void CGameObject::destroy_anim_mov_ctrl() { xr_delete(m_anim_mov_ctrl); }
+
+///////////////////Перенесено из ai_object_location_impl.h////////////////////////
+void CAI_ObjectLocation::init()
+{
+    if (ai().get_level_graph())
+        ai().level_graph().set_invalid_vertex(m_level_vertex_id);
+    else
+        m_level_vertex_id = u32(-1);
+
+    if (ai().get_game_graph())
+        ai().game_graph().set_invalid_vertex(m_game_vertex_id);
+    else
+        m_game_vertex_id = GameGraph::_GRAPH_ID(-1);
+}
+
+/*IC*/ void CAI_ObjectLocation::game_vertex(const CGameGraph::CVertex* game_vertex)
+{
+    VERIFY(ai().game_graph().valid_vertex_id(ai().game_graph().vertex_id(game_vertex)));
+    m_game_vertex_id = ai().game_graph().vertex_id(game_vertex);
+}
+
+/*IC*/ void CAI_ObjectLocation::game_vertex(const GameGraph::_GRAPH_ID game_vertex_id)
+{
+    VERIFY(ai().game_graph().valid_vertex_id(game_vertex_id));
+    m_game_vertex_id = game_vertex_id;
+}
+
+/*IC*/ const CGameGraph::CVertex* CAI_ObjectLocation::game_vertex() const
+{
+    VERIFY(ai().game_graph().valid_vertex_id(m_game_vertex_id));
+    return (ai().game_graph().vertex(m_game_vertex_id));
+}
+
+/*IC*/ void CAI_ObjectLocation::level_vertex(const CLevelGraph::CVertex* level_vertex)
+{
+    VERIFY(ai().level_graph().valid_vertex_id(ai().level_graph().vertex_id(level_vertex)));
+    m_level_vertex_id = ai().level_graph().vertex_id(level_vertex);
+}
+
+/*IC*/ void CAI_ObjectLocation::level_vertex(const u32 level_vertex_id)
+{
+    VERIFY(ai().level_graph().valid_vertex_id(level_vertex_id));
+    m_level_vertex_id = level_vertex_id;
+}
+
+/*IC*/ const CLevelGraph::CVertex* CAI_ObjectLocation::level_vertex() const
+{
+    VERIFY(ai().level_graph().valid_vertex_id(m_level_vertex_id));
+    return (ai().level_graph().vertex(m_level_vertex_id));
+}
+//////////////////////////////////////////////////////////////////////////////////
+
+void CGameObject::addFeelTouch(float radius, const luabind::object& lua_object, const luabind::functor<void>& new_delete, const luabind::functor<bool>& contact)
+{
+    CScriptCallbackEx<bool> feel_touch_contact;
+    CScriptCallbackEx<void> feel_touch_new_delete;
+    feel_touch_new_delete.set(new_delete, lua_object);
+    if (contact)
+        feel_touch_contact.set(contact, lua_object);
+    for (auto& ft : feel_touch_addons)
+    {
+        if (ft->feel_touch_new_delete == feel_touch_new_delete && (!contact || ft->feel_touch_contact == feel_touch_contact))
+        {
+            ft->radius = radius;
+            return;
+        }
+    }
+    FeelTouchAddon* ft = xr_new<FeelTouchAddon>();
+    feel_touch_addons.push_back(ft);
+    ft->radius = radius;
+    ft->feel_touch_new_delete = feel_touch_new_delete;
+    if (contact)
+        ft->feel_touch_contact = feel_touch_contact;
+}
+
+void CGameObject::removeFeelTouch(const luabind::object& lua_object, const luabind::functor<void>& new_delete, const luabind::functor<bool>& contact)
+{
+    CScriptCallbackEx<bool> feel_touch_contact;
+    CScriptCallbackEx<void> feel_touch_new_delete;
+    feel_touch_new_delete.set(new_delete, lua_object);
+    if (contact)
+        feel_touch_contact.set(contact, lua_object);
+    if (feel_touch_processing)
+    {
+        for (auto& ft : feel_touch_addons)
+        {
+            if (ft->feel_touch_new_delete == feel_touch_new_delete && (!contact || ft->feel_touch_contact == feel_touch_contact))
+            {
+                ft->radius = -1;
+                feel_touch_changed = true;
+                break;
+            }
+        }
+    }
+    else
+    {
+        feel_touch_addons.erase(std::remove_if(feel_touch_addons.begin(), feel_touch_addons.end(),
+                                               [&](auto& ft) {
+                                                   if (ft->feel_touch_new_delete == feel_touch_new_delete && (!contact || ft->feel_touch_contact == feel_touch_contact))
+                                                   {
+                                                       xr_delete(ft);
+                                                       return true;
+                                                   }
+                                                   return false;
+                                               }),
+                                feel_touch_addons.end());
+    }
+}
+
+void CGameObject::FeelTouchAddonsUpdate()
+{
+    feel_touch_changed = false;
+    feel_touch_processing = true;
+    for (auto& ft : feel_touch_addons)
+    {
+        if (ft->radius <= 0)
+            continue;
+        ft->feel_touch.feel_touch_update(
+            Position(), ft->radius,
+            [&](const auto O, bool is_new) {
+                CGameObject* GO = smart_cast<CGameObject*>(O);
+                ft->feel_touch_new_delete(GO->lua_game_object(), is_new);
+            },
+            [&](const auto O) -> bool {
+                CGameObject* GO = smart_cast<CGameObject*>(O);
+                if (!GO)
+                    return false;
+                if (ft->feel_touch_contact)
+                {
+                    return ft->feel_touch_contact(GO->lua_game_object());
+                }
+                else
+                    return (smart_cast<CEntityAlive*>(O) || smart_cast<CCar*>(O)) ? true : false;
+            });
+    }
+    feel_touch_processing = false;
+    if (feel_touch_changed)
+    {
+        feel_touch_addons.erase(std::remove_if(feel_touch_addons.begin(), feel_touch_addons.end(), [](auto& ft) { return ft->radius < 0; }), feel_touch_addons.end());
+        feel_touch_changed = false;
+    }
+}
+
+void CGameObject::FeelTouchAddonsRelcase(CObject* O)
+{
+    if (feel_touch_addons.empty())   // nearly every object: skip before asking the level (see CScriptBinder::net_Relcase)
+        return;
+    if (Level().is_removing_objects())
+        return;
+    for (auto& ft : feel_touch_addons)
+    {
+        ft->feel_touch.feel_touch_relcase2(O, [&](const auto O, bool is_new) {
+            CGameObject* GO = smart_cast<CGameObject*>(O);
+            ft->feel_touch_new_delete(GO->lua_game_object(), is_new);
+        });
+    }
+}

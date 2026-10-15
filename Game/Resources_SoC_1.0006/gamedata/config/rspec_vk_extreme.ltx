@@ -1,0 +1,91 @@
+; Vulkan renderer quality preset - EXTREME
+; Everything this renderer can do, on. Not a recommendation - a ceiling.
+; See rspec_vk_minimum.ltx for why these files exist and why the name is new.
+
+r_render_scale 1.
+r_aa_mode dlaa
+r_dlss_preset 11
+r_dlss_sharp 0.25
+
+; *** SHADOWS. Was sixteen lines here; it is one now, and the one also
+; reaches the entries the sixteen never did - r_vsm_tree_wind(_dist) (the
+; radius inside which a crown is re-rasterised every frame instead of being
+; read from the static cache: VSM/DynTrees was 4.20 of 8.57 ms on a 780M),
+; r_vsm_cadence, r_vsm_base and the r_vsm_throttle budget.
+; One authority on purpose: the shadow row of the options screen DERIVES
+; which tier is on from these values, so a preset that set half of them by
+; hand would leave that row reading "Custom" right after a fresh pick.
+r_shadows Ultra
+r_sun_grass_dist 60.
+
+r_ssao 1
+r2_ssao st_opt_high
+r_ssao_strength 2.
+r_ssao_temporal 0.85
+r_ssil 1
+r_ssil_strength 0.8
+r_spec_occ 1.
+r_ibl 1
+r_sky_sh 1
+
+; *** GI CHAIN. No preset ever touched it - and on a GPU with no ray-tracing
+; headroom it is the single most expensive line in the file. Measured on a
+; Radeon 780M (pripyat_full, 2560x1600): Gather 6.62 + DDGI 2.21 + WRC 0.46
+; = 9.3 ms out of a 75 ms frame, and the presets could not reach any of it.
+; Why the line was missing: r_ddgi / r_gather / r_wrc are NoSave cvars, so
+; they never appear in a saved config and nobody thought to put them here.
+; The r_gi COMMAND gets around that - cfg_load runs it like any console line.
+; off = tear the producers down | 1 probes | 2 + final gather | 3 + world cache
+r_gi 3
+
+; Draw distance. far_plane_render = the weather far_plane (~400 m) TIMES this.
+; The 8.0 default was measured free on a 4070-class laptop; on a weak GPU in
+; forest it is the VSM caster set, the cull walk and the HZB, and it is not.
+rs_vis_distance 8.
+
+r_light_cones 1
+r_light_cone_density 1.6
+r_flashlight_glow 2.
+
+r_vol 1
+r_vol_intensity 3.
+r_vol_ms 4
+r_vol_ta 1
+r_vol_upsample 1
+r_vol_mist 0.3
+r_vol_smoke 1.
+r_vol_smoke_shadow 1.
+r_clouds 1
+r_clouds_steps 96
+r_rain 1
+
+r_tree_dist 800.
+r_tree_hzb 1
+r_tree_shade_dist 300.
+r__detail_density 0.2
+r__detail_radius 200
+r__detail_scale 1.
+r_grass_aref 0.22
+r_wind_tree_bend 0.18
+r_hzb_cull 1
+r_vrs 0
+
+r_pom 1
+r_pom_steps 48.
+r_pom_terrain 1
+r_bump 1.
+r_terrain_detail_dist 300.
+r_wet_dist 350.
+r_wet_refl 0.8
+r_puddle_level 0.6
+r_snow_deform 1
+
+r_wtr 1
+r_wtr_tess 64.
+r_wtr_refl 1.5
+r_wtr_caustic 0.9
+r_wtr_sim 1
+
+r_dither 1.
+r_txstream 1
+r_gpu_particles 0

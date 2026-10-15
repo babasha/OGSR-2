@@ -1,0 +1,27 @@
+<rml>
+<head>
+    <title>touch_close</title>
+    <!--
+        The phone's way out of a screen (14-10): one round button over whatever screen is up -- the inventory, the
+        PDA, trade, a body, a talk, a script's window. xrGame/ui_rml_touch.cpp shows it, sizes it by the panel's
+        dpi (the screens' own unit is no thumb's: it follows the layout), and a tap on it is the pad's Plus -- Esc
+        over a screen, so each screen closes by its own rules.
+    -->
+    <style>
+        body
+        {
+            display: block;
+            position: absolute;
+            right: 1%;
+            top: 1%;
+            text-align: center;
+            font-family: rml_roboto;
+            color: #d6c7a1;
+            background-color: rgba(18, 18, 16, 170);
+            border: 2px rgba(214, 199, 161, 170);
+        }
+        body:active { background-color: rgba(214, 199, 161, 130); color: #1a1a16; }
+    </style>
+</head>
+<body id="t-close">×</body>
+</rml>

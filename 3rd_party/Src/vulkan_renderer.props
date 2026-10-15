@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  vulkan_renderer.props — shared MSBuild settings for the Vulkan renderer.
+
+  Import this from any project that needs Vulkan/VMA/(future) NGX/Reflex.
+  Usage in vcxproj:
+    <Import Project="$(SolutionDir)\3rd_party\Src\vulkan_renderer.props" />
+
+  Requires:
+    - VulkanSDK installed (sets %VULKAN_SDK% env var). Tested with 1.4.x.
+    - VMA cloned via Update_Components.cmd (header-only; no link).
+
+  DLSS / Reflex are intentionally commented out — Phase 0/1 ships VK only.
+  Uncomment the marked blocks once those subsystems are wired in (Phase 4).
+-->
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+  <!-- Fail fast at project-load time if VulkanSDK is missing. -->
+  <Target Name="CheckVulkanSDK" BeforeTargets="PrepareForBuild">
+    <Error Condition="'$(VULKAN_SDK)' == ''"
+           Text="VULKAN_SDK environment variable not set. Install the Vulkan SDK (https://vulkan.lunarg.com) and re-open the solution." />
+  </Target>
+
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>
+        $(VULKAN_SDK)\Include;
+        $(SolutionDir)\3rd_party\Src\VulkanMemoryAllocator\VulkanMemoryAllocator\include;
+        $(SolutionDir)\3rd_party\Src\NVIDIA_Streamline\include;
+        <!-- DLSS (deferred): $(SolutionDir)\3rd_party\Src\NVIDIA_DLSS\DLSS\include; -->
+        <!-- Reflex (deferred): $(SolutionDir)\3rd_party\Src\NVIDIA_Reflex\Reflex\inc; -->
+        %(AdditionalIncludeDirectories)
+      </AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>
+        VK_USE_PLATFORM_WIN32_KHR;
+        %(PreprocessorDefinitions)
+      </PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <AdditionalLibraryDirectories>
+        $(VULKAN_SDK)\Lib;
+        $(SolutionDir)\3rd_party\Src\NVIDIA_Streamline\lib\x64;
+        <!-- DLSS (deferred): $(SolutionDir)\3rd_party\Src\NVIDIA_DLSS\DLSS\lib\Windows_x86_64\x64; -->
+        <!-- Reflex (deferred): $(SolutionDir)\3rd_party\Src\NVIDIA_Reflex\Reflex\lib; -->
+        %(AdditionalLibraryDirectories)
+      </AdditionalLibraryDirectories>
+      <AdditionalDependencies>
+        <!-- Streamline: link sl.interposer.lib INSTEAD of vulkan-1.lib. The interposer
+             re-exports the vk* entry points and routes them through Streamline so DLSS/
+             Reflex/Frame-Gen can hook device creation + present. (ProgrammingGuide: no
+             vulkan-1.dll dependency should remain.) To revert to raw Vulkan, swap back
+             to vulkan-1.lib. -->
+        sl.interposer.lib;
+        <!-- DLSS (deferred): nvsdk_ngx_d.lib; -->
+        <!-- Reflex (deferred): NvLowLatencyVk.lib; -->
+        %(AdditionalDependencies)
+      </AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+</Project>

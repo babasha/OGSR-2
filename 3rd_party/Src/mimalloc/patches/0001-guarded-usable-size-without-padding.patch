@@ -1,0 +1,24 @@
+diff --git a/src/free.c b/src/free.c
+index 8762ae1..525211d 100644
+--- a/src/free.c
++++ b/src/free.c
+@@ -507,7 +507,18 @@ void _mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const si
+ }
+ #else
+ static size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* block, bool is_guarded) {
+-  MI_UNUSED(is_guarded); MI_UNUSED(block);
++  MI_UNUSED(block);
++  #if MI_GUARDED
++  // OGSR 10-10-2026: the guard page at the end of a guarded block is NOT usable. Only the MI_PADDING
++  // version above knew it; without padding (our Release) mi_usable_size counted the guard page in, so
++  // realloc of a guarded block either copied through the guard (read AV) or kept the block "in place"
++  // for a size that ran into it (write AV) -- the CMemoryWriter start-up crash.
++  if (is_guarded) {
++    return (mi_page_block_size(page) - _mi_os_page_size());
++  }
++  #else
++  MI_UNUSED(is_guarded);
++  #endif
+   return mi_page_usable_block_size(page);
+ }
+ 

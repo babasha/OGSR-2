@@ -1,0 +1,10 @@
+# Harness by-products: console channel files and captured allocator stderr.
+cl_cmds_*.txt
+mi_stderr_*.txt
+luavm_*.txt
+
+# A/B capture dumps from the run_*.ps1 harnesses. Every frame is a raw 10.5 MB
+# .tga (plus its .png conversion); a single session drops 20-100 MB of them and
+# they are only meaningful in the run that produced them. The batches already in
+# history predate this rule -- do not add new ones.
+shots_*/

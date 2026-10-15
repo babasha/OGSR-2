@@ -1,0 +1,174 @@
+////////////////////////////////////////////////////////////////////////////
+//	Module 		: ai_space.h
+//	Created 	: 12.11.2003
+//  Modified 	: 12.11.2003
+//	Author		: Dmitriy Iassenev
+//	Description : AI space class
+////////////////////////////////////////////////////////////////////////////
+
+#include "StdAfx.h"
+#include "game_graph.h"
+#include "game_level_cross_table.h"
+#include "level_graph.h"
+#include "graph_engine.h"
+#include "ef_storage.h"
+#include "ai_space.h"
+#include "cover_manager.h"
+#include "cover_point.h"
+#include "script_engine.h"
+#include "patrol_path_storage.h"
+#include "alife_simulator.h"
+#include "sound_propagation.h"
+
+CAI_Space* g_ai_space = 0;
+
+CAI_Space::CAI_Space()
+{
+    m_ef_storage = 0;
+    m_game_graph = 0;
+    m_graph_engine = 0;
+    m_cover_manager = 0;
+    m_level_graph = 0;
+    m_alife_simulator = 0;
+    m_patrol_path_storage = 0;
+    m_script_engine = 0;
+}
+
+void CAI_Space::init()
+{
+    VERIFY(!m_ef_storage);
+    m_ef_storage = xr_new<CEF_Storage>();
+
+    VERIFY(!m_graph_engine);
+    m_graph_engine = xr_new<CGraphEngine>(1024); // game_graph().header().vertex_count() ???
+
+    VERIFY(!m_cover_manager);
+    m_cover_manager = xr_new<CCoverManager>();
+
+    VERIFY(!m_patrol_path_storage);
+    m_patrol_path_storage = xr_new<CPatrolPathStorage>();
+
+    VERIFY(!m_script_engine);
+    m_script_engine = xr_new<CScriptEngine>();
+    script_engine().init();
+}
+
+CAI_Space::~CAI_Space()
+{
+    SoundPropagation::Reset();
+    xr_delete(m_graph_engine);
+    xr_delete(m_level_graph);
+
+    script_engine().unload();
+
+    xr_delete(m_patrol_path_storage);
+
+    xr_delete(m_patrol_path_storage);
+    xr_delete(m_ef_storage);
+    xr_delete(m_graph_engine);
+
+    VERIFY(!m_game_graph);
+
+    xr_delete(m_script_engine);
+    xr_delete(m_cover_manager);
+}
+
+void CAI_Space::load(LPCSTR level_name)
+{
+    VERIFY(m_game_graph);
+
+    unload(true); // перезагрузка на одной и тоже локации !!!
+
+    // The whole 'st_loading_alife_simulator' phase is this call — it is reached once,
+    // through graph().update() on the actor, and costs ~450 ms of every level load.
+    // Split it: the AI map read, the search-engine allocation, and the static cover
+    // pass are unrelated costs and only one of them can be the one worth attacking.
+    CTimer _t; _t.Start();
+    auto lap = [&_t] { const float v = _t.GetElapsed_ms_total(); _t.Start(); return v; };
+
+    const CGameGraph::SLevel& current_level = game_graph().header().level(level_name);
+
+    string_path file_name;
+    FS.update_path(file_name, "$level$", LEVEL_GRAPH_NAME);
+
+    m_level_graph = xr_new<CLevelGraph>(file_name);
+    const float ms_levelGraph = lap();
+    game_graph().set_current_level(current_level.id());
+    auto& crossHeader = cross_table().header();
+    auto& levelHeader = level_graph().header();
+    auto& gameHeader = game_graph().header();
+    R_ASSERT(crossHeader.level_guid() == levelHeader.guid(), "cross_table doesn't correspond to the AI-map");
+    R_ASSERT(crossHeader.game_guid() == gameHeader.guid(), "graph doesn't correspond to the cross table");
+
+    const float ms_check = lap();
+
+    u32 vertexCount = _max(gameHeader.vertex_count(), levelHeader.vertex_count());
+    m_graph_engine = xr_new<CGraphEngine>(vertexCount);
+    const float ms_engine = lap();
+    R_ASSERT(current_level.guid() == levelHeader.guid(), "graph doesn't correspond to the AI-map");
+
+    level_graph().level_id(current_level.id());
+
+    // Off the critical path (ai_cover_async): the cover tree is not read until
+    // objects update, and the join is CLevel::Load_GameSpecific_Before, on the far
+    // side of the whole render phase. Its own timings come from the worker's own
+    // "static cover:" line.
+    m_cover_manager->compute_static_cover_async();
+    Msg("[load step]   ai_space::load '%s': level graph %.0f (%u nodes) | guid checks %.0f | graph engine %.0f (%u verts) | static cover start %.0f ms",
+        level_name, ms_levelGraph, levelHeader.vertex_count(), ms_check, ms_engine, vertexCount, lap());
+}
+
+void CAI_Space::wait_cover_ready()
+{
+    if (m_cover_manager)
+        m_cover_manager->wait_ready();
+}
+
+void CAI_Space::unload(bool reload)
+{
+    // FIRST: a static-cover build may still be running, and it reads the level
+    // graph deleted on the next line.
+    if (m_cover_manager)
+        m_cover_manager->wait_ready();
+    // and the sound thread walks it (snd_prop): a save loaded on the same level replaces the graph here while
+    // CLevel lives on (08-10-2026: AV in CLevelSoundPaths::locate on the freed nodes). Frame() hands the new one.
+    SoundPropagation::Reset();
+
+    xr_delete(m_graph_engine);
+    xr_delete(m_level_graph);
+
+    if (!reload)
+    {
+        script_engine().unload();
+        script_engine().init();
+
+        xr_delete(m_patrol_path_storage);
+        m_cover_manager->clear();
+    }
+
+    // ???
+    /*if (!reload && m_game_graph)
+        m_graph_engine = xr_new<CGraphEngine>(game_graph().header().vertex_count());*/
+}
+
+void CAI_Space::patrol_path_storage(IReader& stream)
+{
+    xr_delete(m_patrol_path_storage);
+    m_patrol_path_storage = xr_new<CPatrolPathStorage>();
+
+    m_patrol_path_storage->load(stream);
+}
+
+void CAI_Space::patrol_path_storage_ini(CInifile& way_inifile) { m_patrol_path_storage->append_from_ini(way_inifile); }
+
+void CAI_Space::set_alife(CALifeSimulator* alife_simulator)
+{
+    VERIFY((!m_alife_simulator && alife_simulator) || (m_alife_simulator && !alife_simulator));
+    m_alife_simulator = alife_simulator;
+
+    VERIFY(!alife_simulator || !m_game_graph);
+    if (alife_simulator)
+        return;
+
+    set_game_graph(nullptr);
+}
